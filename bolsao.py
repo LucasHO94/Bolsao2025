@@ -101,21 +101,22 @@ import streamlit as st
 
 st.set_page_config(page_title="Gerador de Cartas • Bolsão", layout="centered")
 
-# --- NOVO CÓDIGO PARA ESCONDER A INTERFACE DO STREAMLIT ---
-# Substitua o bloco antigo por este
+# --- CÓDIGO FINAL E CORRETO PARA ESCONDER A INTERFACE ---
 hide_st_style = """
             <style>
+            /* Esconde o botão 'Manage app' com o seletor correto que você encontrou */
+            button[data-testid="manage-app-button"] {
+                display: none !important;
+            }
+
+            /* Mantém as regras para esconder os outros elementos da interface */
             #MainMenu {display: none !important;}
-            button[data-testid="baseButton-header"] {display: none !important;}
-            div[data-testid="stToolbar"] {display: none !important;}
-            div[data-testid="stDecoration"] {display: none !important;}
-            div[data-testid="stStatusWidget"] {display: none !important;}
             footer {display: none !important;}
             header {display: none !important;}
             </style>
             """
 st.markdown(hide_st_style, unsafe_allow_html=True)
-# --- FIM DO NOVO CÓDIGO ---
+# --- FIM DO CÓDIGO ---
 
 st.title("🎓 Gerador de Cartas de Bolsa & Calculadora de Negociação")
 
@@ -228,6 +229,7 @@ with aba_negociacao:
     st.write(f"Parcela resultante: {format_currency(mens_res)} em {parcelas}×")
 
 st.caption("Desenvolvido para Matriz Educação • Suporte: TI Interno")
+
 
 
 
