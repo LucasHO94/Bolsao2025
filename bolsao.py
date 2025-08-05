@@ -100,7 +100,6 @@ import streamlit as st
 # ... seus outros imports ...
 
 st.set_page_config(page_title="Gerador de Cartas • Bolsão", layout="centered")
-st.set_page_config(page_title="Gerador de Cartas • Bolsão", layout="centered")
 
 # --- CÓDIGO PARA ESCONDER A BARRA DE FERRAMENTAS ---
 hide_st_style = """
@@ -242,5 +241,6 @@ with aba_negociacao:
     st.write(f"Parcela resultante: {format_currency(mens_res)} em {parcelas}×")
 
 st.caption("Desenvolvido para Matriz Educação • Suporte: TI Interno")
+
 
 
