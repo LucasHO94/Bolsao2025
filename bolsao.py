@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Gerador_Carta_Bolsa.py (v2.1 - Layout Corrigido)
+Gerador_Carta_Bolsa.py (v3 - Conexão Robusta)
 -------------------------------------------------
 Aplicação Streamlit que gera cartas personalizadas de concessão de bolsa
 (e calculadora de negociação), utilizando WeasyPrint para criar o PDF
@@ -53,14 +53,13 @@ TUITION = {
     "Pré-Vestibular": {"anuidade": 13335.00, "parcela13": 1025.77},
 }
 
-# LISTA DE UNIDADES ATUALIZADA
 UNIDADES = [
     "Bangu", "Campo Grande", "Caxias", "Madureira", "Nova Iguaçu", "Retiro dos Artistas", 
     "Rocha Miranda", "São João de Meriti", "Taquara", "Tijuca",
 ]
 
 # --------------------------------------------------
-# UTILITÁRIOS
+# FUNÇÕES DE LÓGICA
 # --------------------------------------------------
 def calcula_bolsa(acertos: int) -> float:
     ac = max(0, min(acertos, 24))
@@ -69,24 +68,29 @@ def calcula_bolsa(acertos: int) -> float:
 def format_currency(v: float) -> str:
     return f"R$ {v:,.2f}".replace(",", "@").replace(".", ",").replace("@", ".")
 
-# --------------------------------------------------
-# GERAÇÃO DE PDF COM WEASYPRINT
-# --------------------------------------------------
 def gera_pdf_html(ctx: dict) -> bytes:
-    """Gera um PDF a partir de um template HTML, preenchendo com dados de `ctx`."""
     base_dir = Path(__file__).parent
     html_path = base_dir / "carta.html"
-    
     with open(html_path, encoding="utf-8") as f:
         html_template = f.read()
-
     html_renderizado = html_template
     for k, v in ctx.items():
         html_renderizado = html_renderizado.replace(f"{{{{{k}}}}}", str(v))
-
     html_obj = weasyprint.HTML(string=html_renderizado, base_url=str(base_dir))
     return html_obj.write_pdf()
 
+# *** FUNÇÃO DE CONEXÃO MELHORADA ***
+@st.cache_resource
+def get_google_sheets_client():
+    """Conecta ao Google Sheets usando os segredos do Streamlit e faz cache da conexão."""
+    try:
+        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+        creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
+        client = gspread.authorize(creds)
+        return client
+    except Exception as e:
+        st.error(f"Erro ao conectar com o Google Sheets: {e}")
+        return None
 
 # --------------------------------------------------
 # INTERFACE STREAMLIT
@@ -94,10 +98,12 @@ def gera_pdf_html(ctx: dict) -> bytes:
 st.set_page_config(page_title="Gerador de Cartas • Bolsão", layout="centered")
 st.title("🎓 Gerador de Cartas de Bolsa & Calculadora de Negociação")
 
+# Conecta ao Google Sheets uma vez no início
+g_client = get_google_sheets_client()
+
 aba_carta, aba_negociacao = st.tabs(["Gerar Carta", "Negociação"])
 
 with aba_carta:
-    # ... (o resto da interface continua igual) ...
     c1, c2 = st.columns(2)
     with c1:
         unidade = st.selectbox("Unidade", UNIDADES, index=UNIDADES.index("Bangu"), key="c_unid")
@@ -118,15 +124,13 @@ with aba_carta:
     if st.button("Gerar Carta PDF", key="c_gerar"):
         if not aluno:
             st.error("Por favor, preencha o nome do candidato.")
+        elif g_client is None:
+            st.error("Não foi possível gerar a carta pois a conexão com a planilha falhou. Verifique as credenciais.")
         else:
             hoje = date.today()
             nome_bolsao = "-"
             try:
-                # ... (código do Google Sheets continua igual) ...
-                scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-                creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
-                client = gspread.authorize(creds)
-                sheet = client.open_by_url("https://docs.google.com/spreadsheets/d/1qBV70qrPswnAUDxnHfBgKEU4FYAISpL7iVP0IM9zU2Q/edit#gid=380208567")
+                sheet = g_client.open_by_url("https://docs.google.com/spreadsheets/d/1qBV70qrPswnAUDxnHfBgKEU4FYAISpL7iVP0IM9zU2Q/edit#gid=380208567")
                 aba_bolsao = sheet.worksheet("Bolsão")
                 dados_bolsao = aba_bolsao.get_all_records()
                 for linha in dados_bolsao:
@@ -139,11 +143,8 @@ with aba_carta:
                             break
             except Exception as e:
                 st.warning(f"Não foi possível obter nome do bolsão: {e}")
-            
-            # *** MUDANÇA AQUI ***
-            # Gera o HTML para a lista de unidades
-            unidades_html = "".join(f"<span class='unidade-item'>{unidade}</span>" for unidade in UNIDADES)
 
+            unidades_html = "".join(f"<span class='unidade-item'>{u}</span>" for u in UNIDADES)
             ctx = {
                 "ano": hoje.year,
                 "unidade": f"Colégio Matriz – {unidade}",
@@ -157,22 +158,15 @@ with aba_carta:
                 "anuidade_vista": format_currency(val_ano * 0.93),
                 "primeira_cota": format_currency(val_parc),
                 "valor_parcela": format_currency(val_parc),
-                "unidades_html": unidades_html, # <-- Nova variável para o HTML
+                "unidades_html": unidades_html,
             }
             
             pdf_bytes = gera_pdf_html(ctx)
             st.success("✅ Carta em PDF gerada com sucesso!")
 
-            # ... (código de registro no Google Sheets e download continua igual) ...
             try:
-                if 'client' not in locals():
-                    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-                    creds = Credentials.from_service_account_file("credenciais.json", scopes=scope)
-                    client = gspread.authorize(creds)
-                    sheet = client.open_by_url("https://docs.google.com/spreadsheets/d/1qBV70qrPswnAUDxnHfBgKEU4FYAISpL7iVP0IM9zU2Q/edit#gid=380208567")
-
+                # A variável 'sheet' já deve existir do passo anterior
                 aba_resultados = sheet.worksheet("Resultados_Bolsao")
-                
                 nova_linha = [
                     datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     aluno.strip().title(), unidade, turma,
@@ -197,7 +191,6 @@ with aba_carta:
             )
 
 with aba_negociacao:
-    # ... (aba de negociação continua igual) ...
     cn1, cn2 = st.columns(2)
     with cn1:
         serie_n = st.selectbox("Série / Modalidade", list(TUITION.keys()), key="n_serie")
@@ -213,8 +206,5 @@ with aba_negociacao:
     mens_res = mensal_full * (1 - pct_lanc / 100)
     st.write(f"Parcela resultante: {format_currency(mens_res)} em {parcelas}×")
 
-# --------------------------------------------------
-# RODAPÉ / METADADOS
-# --------------------------------------------------
-
 st.caption("Desenvolvido para Matriz Educação • Suporte: TI Interno")
+
