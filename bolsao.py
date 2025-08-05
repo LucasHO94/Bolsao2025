@@ -101,34 +101,21 @@ import streamlit as st
 
 st.set_page_config(page_title="Gerador de Cartas • Bolsão", layout="centered")
 
-# --- CÓDIGO PARA ESCONDER A BARRA DE FERRAMENTAS ---
+# --- NOVO CÓDIGO PARA ESCONDER A INTERFACE DO STREAMLIT ---
+# Substitua o bloco antigo por este
 hide_st_style = """
             <style>
-            #MainMenu {visibility: hidden;}
-            footer {visibility: hidden;}
-            header {visibility: hidden;}
-            div[data-testid="stToolbar"] {
-              visibility: hidden;
-              height: 0%;
-              position: fixed;
-            }
-            div[data-testid="stDecoration"] {
-              visibility: hidden;
-              height: 0%;
-              position: fixed;
-            }
-            div[data-testid="stStatusWidget"] {
-              visibility: hidden;
-              height: 0%;
-              position: fixed;
-            }
-            #stDecoration {
-              visibility: hidden;
-            }
+            #MainMenu {display: none !important;}
+            button[data-testid="baseButton-header"] {display: none !important;}
+            div[data-testid="stToolbar"] {display: none !important;}
+            div[data-testid="stDecoration"] {display: none !important;}
+            div[data-testid="stStatusWidget"] {display: none !important;}
+            footer {display: none !important;}
+            header {display: none !important;}
             </style>
             """
 st.markdown(hide_st_style, unsafe_allow_html=True)
-# --- FIM DO CÓDIGO ---
+# --- FIM DO NOVO CÓDIGO ---
 
 st.title("🎓 Gerador de Cartas de Bolsa & Calculadora de Negociação")
 
@@ -241,6 +228,7 @@ with aba_negociacao:
     st.write(f"Parcela resultante: {format_currency(mens_res)} em {parcelas}×")
 
 st.caption("Desenvolvido para Matriz Educação • Suporte: TI Interno")
+
 
 
 
