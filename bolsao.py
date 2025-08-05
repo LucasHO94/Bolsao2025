@@ -124,7 +124,7 @@ with aba_carta:
             try:
                 # ... (código do Google Sheets continua igual) ...
                 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-                creds = Credentials.from_service_account_file("credenciais.json", scopes=scope)
+                creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
                 client = gspread.authorize(creds)
                 sheet = client.open_by_url("https://docs.google.com/spreadsheets/d/1qBV70qrPswnAUDxnHfBgKEU4FYAISpL7iVP0IM9zU2Q/edit#gid=380208567")
                 aba_bolsao = sheet.worksheet("Bolsão")
@@ -216,4 +216,5 @@ with aba_negociacao:
 # --------------------------------------------------
 # RODAPÉ / METADADOS
 # --------------------------------------------------
+
 st.caption("Desenvolvido para Matriz Educação • Suporte: TI Interno")
