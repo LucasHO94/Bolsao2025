@@ -64,7 +64,7 @@ h2.subtitulo {
   color: #1c7c3f;
   font-weight: 800;
   text-align: center;
-  margin: 0 0 30pt 0;
+  margin: 0 0 20pt 0; /* Reduzido de 30pt para compactar */
 }
 
 h2 {
@@ -78,7 +78,7 @@ h2 {
 p.intro {
   font-size: 11pt;
   line-height: 1.3;
-  margin: 0 auto 20pt auto;
+  margin: 0 auto 15pt auto; /* Reduzido de 20pt */
   text-align: justify;
   max-width: 140mm;
   padding-left: 10mm;
@@ -87,32 +87,31 @@ p.intro {
 
 p.center {
   text-align: center;
-  margin: 6pt 0 20pt 0;
+  margin: 6pt 0 15pt 0; /* Reduzido de 20pt */
 }
 
 p.center2 {
   text-align: center;
-  margin: 20pt 0 25pt 0;
+  margin: 15pt 0 15pt 0; /* Reduzido de 20pt e 25pt */
   font-size: 18pt;
 }
 
-/* --- ESTILOS FINAIS E CORRIGIDOS PARA PÁGINA 3 --- */
+/* --- ESTILOS FINAIS PARA PÁGINA 3 --- */
 .linha-formulario {
-  display: grid; /* Usando Grid para o alinhamento perfeito */
-  grid-template-columns: auto 1fr; /* Coluna 1 (label) se ajusta ao texto; Coluna 2 (campo) ocupa o resto */
-  grid-column-gap: 8px; /* Espaço entre o label e o campo */
-  align-items: baseline; /* Alinha o texto do label com o texto do valor */
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-column-gap: 8px;
+  align-items: baseline;
   margin: 10pt auto;
   max-width: 140mm;
 }
 
 .label-form {
-  text-align: right; /* Alinha o texto da etiqueta à direita para um visual limpo */
+  text-align: right;
   white-space: nowrap;
 }
 
 .campo {
-  /* Não precisa mais de flex-grow, o grid cuida disso */
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -168,7 +167,7 @@ p.indica {
 p.small {
   font-size: 11pt;
   line-height: 1.2;
-  margin: 30pt 10pt 0 25pt;
+  margin: 20pt 10pt 0 25pt; /* Reduzido de 30pt */
   text-align: center;
   max-width: 150mm;
   padding-left: 10mm;
@@ -202,7 +201,7 @@ p.small2 {
   flex-wrap: wrap;
   justify-content: center;
   align-items: center;
-  gap: 4px 8px;
+  gap: 2px 8px; /* Reduzido espaçamento vertical */
   padding: 0 5mm;
   margin-top: 10px;
 }
