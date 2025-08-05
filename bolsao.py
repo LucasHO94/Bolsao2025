@@ -95,7 +95,42 @@ def get_google_sheets_client():
 # --------------------------------------------------
 # INTERFACE STREAMLIT
 # --------------------------------------------------
+
+import streamlit as st
+# ... seus outros imports ...
+
 st.set_page_config(page_title="Gerador de Cartas • Bolsão", layout="centered")
+st.set_page_config(page_title="Gerador de Cartas • Bolsão", layout="centered")
+
+# --- CÓDIGO PARA ESCONDER A BARRA DE FERRAMENTAS ---
+hide_st_style = """
+            <style>
+            #MainMenu {visibility: hidden;}
+            footer {visibility: hidden;}
+            header {visibility: hidden;}
+            div[data-testid="stToolbar"] {
+              visibility: hidden;
+              height: 0%;
+              position: fixed;
+            }
+            div[data-testid="stDecoration"] {
+              visibility: hidden;
+              height: 0%;
+              position: fixed;
+            }
+            div[data-testid="stStatusWidget"] {
+              visibility: hidden;
+              height: 0%;
+              position: fixed;
+            }
+            #stDecoration {
+              visibility: hidden;
+            }
+            </style>
+            """
+st.markdown(hide_st_style, unsafe_allow_html=True)
+# --- FIM DO CÓDIGO ---
+
 st.title("🎓 Gerador de Cartas de Bolsa & Calculadora de Negociação")
 
 # Conecta ao Google Sheets uma vez no início
@@ -207,4 +242,5 @@ with aba_negociacao:
     st.write(f"Parcela resultante: {format_currency(mens_res)} em {parcelas}×")
 
 st.caption("Desenvolvido para Matriz Educação • Suporte: TI Interno")
+
 
