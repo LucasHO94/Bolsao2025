@@ -1,0 +1,5 @@
+streamlit
+weasyprint
+gspread
+oauth2client
+Pillow

@@ -1,0 +1,331 @@
+@page {
+  size: A4 portrait;
+  margin: 0;
+}
+@media print {
+  th {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  font-family: 'Arial', sans-serif;
+  color: #000;
+  width: auto;
+  height: auto;
+}
+
+.pagina {
+  page-break-after: always;
+}
+.pagina:last-child {
+  page-break-after: auto;
+}
+
+.container {
+  position: relative;
+  border: 3px solid #1c7c3f;
+  box-sizing: border-box;
+  padding: 0 ;
+  margin: 15mm auto;
+  width: 180mm;
+  background: #fff;
+}
+
+.pagina .container {
+  margin-bottom: 20mm;
+}
+
+.pagina:not(:last-child) .container {
+  margin-bottom: 20mm;
+}
+
+.logo {
+  display: block;
+  margin: 0 auto 0 auto;
+  max-width: 100mm;
+  height: auto;
+}
+
+h1 {
+  font-size: 36pt;
+  font-weight: 1000;
+  font-family: 'Arial Black', Arial, sans-serif;
+  color: #1c7c3f;
+  text-align: center;
+  margin: 0;
+}
+
+h2.subtitulo {
+  font-size: 15pt;
+  color: #1c7c3f;
+  font-weight: 800;
+  text-align: center;
+  margin: 0 0 30pt 0;
+}
+
+h2 {
+  font-size: 14pt;
+  text-align: center;
+  margin: 4pt 0 8pt;
+  font-weight: normal;
+  color: #1c7c3f;
+}
+
+p.intro {
+  font-size: 11pt;
+  line-height: 1.3;
+  margin: 0 auto 20pt auto;
+  text-align: justify;
+  max-width: 140mm;
+  padding-left: 10mm;
+  padding-right: 10mm;
+}
+
+p.center {
+  text-align: center;
+  margin: 6pt 0 20pt 0;
+}
+
+p.center2 {
+  text-align: center;
+  margin: 20pt 0 25pt 0;
+  font-size: 18pt;
+}
+
+/* --- ESTILOS FINAIS E CORRIGIDOS PARA PÁGINA 3 --- */
+.linha-formulario {
+  display: grid; /* Usando Grid para o alinhamento perfeito */
+  grid-template-columns: auto 1fr; /* Coluna 1 (label) se ajusta ao texto; Coluna 2 (campo) ocupa o resto */
+  grid-column-gap: 8px; /* Espaço entre o label e o campo */
+  align-items: baseline; /* Alinha o texto do label com o texto do valor */
+  margin: 10pt auto;
+  max-width: 140mm;
+}
+
+.label-form {
+  text-align: right; /* Alinha o texto da etiqueta à direita para um visual limpo */
+  white-space: nowrap;
+}
+
+.campo {
+  /* Não precisa mais de flex-grow, o grid cuida disso */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.valor {
+  font-weight: bold;
+  min-height: 1.2em;
+}
+
+.linha-fisica {
+  height: 1px;
+  width: 100%;
+  background-color: #000;
+}
+/* --- FIM DOS ESTILOS PÁGINA 3 --- */
+
+p.Percentual {
+  text-align: center;
+  margin: 8pt auto;
+  max-width: 140mm;
+  line-height: 1.7;
+}
+
+.parabens {
+  display: inline-block;
+  margin-bottom: 18pt;
+  font-size: 14pt;
+}
+
+.bolsa {
+  font-size: 13pt;
+  line-height: 1.3;
+  margin: 4pt auto 0 auto;
+  text-align: center;
+  max-width: 140mm;
+  padding-left: 10mm;
+  padding-right: 10mm;
+  display: block;
+}
+
+p.indica {
+  font-size: 15pt;
+  line-height: 1.3;
+  margin: 16pt auto 10pt auto;
+  text-align: center;
+  max-width: 140mm;
+  padding-left: 10mm;
+  padding-right: 10mm;
+  font-weight: bold;
+}
+
+p.small {
+  font-size: 11pt;
+  line-height: 1.2;
+  margin: 30pt 10pt 0 25pt;
+  text-align: center;
+  max-width: 150mm;
+  padding-left: 10mm;
+  padding-right: 10mm;
+}
+
+p.documentos {
+  font-size: 10pt;
+  line-height: 1.2;
+  margin: 4pt 10pt 10pt 25pt;
+  text-align: center;
+  max-width: 140mm;
+  padding-left: 10mm;
+  padding-right: 10mm;
+}
+
+p.small2 {
+  font-size: 10pt;
+  line-height: 1.2;
+  margin: 0 auto 10pt auto;
+  text-align: center;
+  max-width: 160mm;
+}
+
+.data_limite {
+  display: block;
+}
+
+.unidades-container {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 4px 8px;
+  padding: 0 5mm;
+  margin-top: 10px;
+}
+
+.unidade-item::after {
+  content: '•';
+  margin-left: 8px;
+  color: #333;
+  font-size: 10pt;
+  vertical-align: middle;
+}
+
+.unidade-item:last-child::after {
+  content: '';
+}
+
+p.classificacao {
+  text-align: center;
+}
+
+.planos {
+  margin: 8pt 0 20pt 0;
+  font-size: 14pt;
+  text-align: center;
+}
+
+table {
+  border-collapse: collapse;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+table.pag1 {
+  width: 80%;
+  margin-top: 4pt;
+  font-size: 14pt;
+}
+
+table.pag2 {
+  margin: 0 auto 16pt auto;
+  font-size: 10pt;
+  width: auto;
+  text-align: center;
+}
+
+table.pag2 th, table.pag2 td {
+  font-size: 10pt !important;
+  text-align: center;
+  padding: 2px 6px;
+  line-height: 1.1;
+  font-weight: normal;
+}
+
+table.pag2 th {
+  font-weight: bold !important;
+  background: #1c7c3f;
+  color: #fff;
+  font-size: 11pt !important;
+}
+
+table.pag3 {
+  margin: 0 auto 16pt auto;
+  font-size: 10pt;
+  width: auto;
+  text-align: center;
+}
+
+table.pag3 th, table.pag3 td {
+  font-size: 10pt !important;
+  text-align: center;
+  padding: 2px 6px;
+  line-height: 1.1;
+  font-weight: normal;
+}
+
+table.pag3 th {
+  font-weight: bold !important;
+  background: #1c7c3f;
+  color: #fff;
+  font-size: 11pt !important;
+}
+
+table.classificacao {
+  width: auto;
+  table-layout: fixed;
+  margin-top: 4pt;
+  font-size: 14pt;
+}
+
+table.classificacao th, table.classificacao td {
+  border: 1px solid #030303;
+  padding: 6pt 6pt;
+  text-align: center;
+  width: 60px;
+  min-width: 60px;
+  max-width: 80px;
+}
+
+th, td {
+  border: 1px solid #000;
+  padding: 4pt;
+  text-align: center;
+  vertical-align: middle;
+  font-size: 12pt;
+  font-weight: bold;
+}
+
+th {
+  background: #1c7c3f;
+  color: #fff;
+  font-weight: normal;
+  font-size: 12pt;
+}
+
+.acertos-row {
+  display: flex;
+  justify-content: center;
+  gap: 24px;
+}
+
+.acertos-row .acertos {
+  margin: 0;
+  padding: 0 8px;
+  text-align: left;
+  font-size: 12pt;
+}
