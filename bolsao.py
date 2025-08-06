@@ -99,17 +99,19 @@ def gera_pdf_html(ctx: dict) -> bytes:
     return html_obj.write_pdf()
 
 @st.cache_resource
-def get_gspread_client():
-    """Autentica e retorna o cliente gspread."""
+# *** FUNÇÃO DE CONEXÃO MELHORADA ***
+@st.cache_resource
+def get_google_sheets_client():
+    """Conecta ao Google Sheets usando os segredos do Streamlit e faz cache da conexão."""
     try:
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-        creds = Credentials.from_service_account_file("credenciais.json", scopes=scope)
+        creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
         client = gspread.authorize(creds)
         return client
     except Exception as e:
-        st.error(f"❌ Erro de autenticação com o Google Sheets: {e}")
+        st.error(f"Erro ao conectar com o Google Sheets: {e}")
         return None
-
+        
 # Correção do erro de cache: adicionando _ para o parâmetro client
 @st.cache_data(ttl=600)  # Cache por 10 minutos
 def get_all_hubspot_data(_client):
@@ -470,3 +472,4 @@ with aba_ativacao:
 # RODAPÉ / METADADOS
 # --------------------------------------------------
 st.caption("Desenvolvido para Matriz Educação • Suporte: TI Interno")
+
