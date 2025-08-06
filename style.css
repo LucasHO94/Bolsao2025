@@ -334,7 +334,7 @@ th {
   position: absolute;
   top: 5mm; /* Distância do topo */
   right: 5mm; /* Distância da direita */
-  border: 2px solid #000;
+  border: 1px solid #000;
   padding: 3px 6px;
   text-align: center;
   width: 35mm; /* Largura fixa */
@@ -352,4 +352,5 @@ th {
   display: block;
   height: 10mm; /* Espaço para escrever o número */
 }
+
 
