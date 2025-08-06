@@ -1,31 +1,21 @@
 # -*- coding: utf-8 -*-
 """
-Gerador_Carta_Bolsa.py (v3 - Conexão Robusta)
+Gerador_Carta_Bolsa.py (v5.0 - Versão Unificada)
 -------------------------------------------------
-Aplicação Streamlit que gera cartas personalizadas de concessão de bolsa
-(e calculadora de negociação), utilizando WeasyPrint para criar o PDF
-a partir de um template HTML e CSS.
-
-PRÉ-REQUISITOS:
-- streamlit
-- weasyprint
-- gspread
-- oauth2client
-- Pillow
-
-EXECUÇÃO:
-    python -m streamlit run bolsao.py
+Aplicação Streamlit que gera cartas, gerencia negociações e ativações de bolsão,
+utilizando WeasyPrint para PDF e Pandas para manipulação de dados.
 """
 import io
 from datetime import date, timedelta, datetime
 from pathlib import Path
 import streamlit as st
+import pandas as pd
 import weasyprint
 from google.oauth2.service_account import Credentials
 import gspread
 
 # --------------------------------------------------
-# DADOS DE REFERÊNCIA
+# DADOS DE REFERÊNCIA E CONFIGURAÇÕES
 # --------------------------------------------------
 BOLSA_MAP = {
     0: .30, 1: .30, 2: .30, 3: .35,
@@ -53,13 +43,21 @@ TUITION = {
     "Pré-Vestibular": {"anuidade": 13335.00, "parcela13": 1025.77},
 }
 
-UNIDADES = [
-    "Bangu", "Campo Grande", "Caxias", "Madureira", "Nova Iguaçu", "Retiro dos Artistas", 
-    "Rocha Miranda", "São João de Meriti", "Taquara", "Tijuca",
+# Sistema de Unidades aprimorado
+UNIDADES_COMPLETAS = [
+    "COLEGIO E CURSO MATRIZ EDUCACAO CAMPO GRANDE", "COLEGIO E CURSO MATRIZ EDUCAÇÃO TAQUARA",
+    "COLEGIO E CURSO MATRIZ EDUCAÇÃO BANGU", "COLEGIO E CURSO MATRIZ EDUCACAO NOVA IGUACU",
+    "COLEGIO E CURSO MATRIZ EDUCAÇÃO DUQUE DE CAXIAS", "COLEGIO E CURSO MATRIZ EDUCAÇÃO SÃO JOÃO DE MERITI",
+    "COLEGIO E CURSO MATRIZ EDUCAÇÃO ROCHA MIRANDA", "COLEGIO E CURSO MATRIZ EDUCAÇÃO MADUREIRA",
+    "COLEGIO E CURSO MATRIZ EDUCAÇÃO RETIRO DOS ARTISTAS", "COLEGIO E CURSO MATRIZ EDUCACAO TIJUCA",
 ]
+UNIDADES_MAP = {name.replace("COLEGIO E CURSO MATRIZ EDUCACAO", "").replace("COLEGIO E CURSO MATRIZ EDUCAÇÃO", "").strip(): name for name in UNIDADES_COMPLETAS}
+UNIDADES_LIMPAS = sorted(list(UNIDADES_MAP.keys()))
+
+DESCONTO_MINIMO_PADRAO = 0.60
 
 # --------------------------------------------------
-# FUNÇÕES DE LÓGICA
+# FUNÇÕES DE LÓGICA E UTILITÁRIOS
 # --------------------------------------------------
 def calcula_bolsa(acertos: int) -> float:
     ac = max(0, min(acertos, 24))
@@ -79,9 +77,8 @@ def gera_pdf_html(ctx: dict) -> bytes:
     html_obj = weasyprint.HTML(string=html_renderizado, base_url=str(base_dir))
     return html_obj.write_pdf()
 
-# *** FUNÇÃO DE CONEXÃO MELHORADA ***
 @st.cache_resource
-def get_google_sheets_client():
+def get_gspread_client():
     """Conecta ao Google Sheets usando os segredos do Streamlit e faz cache da conexão."""
     try:
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
@@ -89,38 +86,119 @@ def get_google_sheets_client():
         client = gspread.authorize(creds)
         return client
     except Exception as e:
-        st.error(f"Erro ao conectar com o Google Sheets: {e}")
+        st.error(f"❌ Erro de autenticação com o Google Sheets: {e}")
         return None
+
+@st.cache_data(ttl=600)
+def get_all_hubspot_data(_client):
+    """Obtém todos os dados da aba 'Hubspot'."""
+    try:
+        sheet = _client.open_by_url("https://docs.google.com/spreadsheets/d/1qBV70qrPswnAUDxnHfBgKEU4FYAISpL7iVP0IM9zU2Q/edit#gid=422747648")
+        aba_hubspot = sheet.worksheet("Hubspot")
+        df = pd.DataFrame(aba_hubspot.get_all_records())
+        return df
+    except Exception as e:
+        st.error(f"❌ Falha ao carregar dados do Hubspot: {e}")
+        return pd.DataFrame()
+
+def get_limites_data(client):
+    """Obtém dados da aba 'Limites' e retorna como dicionário."""
+    try:
+        sheet = client.open_by_url("https://docs.google.com/spreadsheets/d/1qBV70qrPswnAUDxnHfBgKEU4FYAISpL7iVP0IM9zU2Q/edit#gid=422747648")
+        aba_limites = sheet.worksheet("Limites")
+        df_limites = pd.DataFrame(aba_limites.get_all_records())
+        limites_dict = {}
+        for _, row in df_limites.iterrows():
+            chave = (row['UNIDADE'], row['GRADE'])
+            if row['VALOR LIMITE']:
+                valor = float(str(row['VALOR LIMITE']).replace('R$', '').replace('.', '').replace(',', '.').strip())
+                limites_dict[chave] = valor
+        return limites_dict
+    except Exception as e:
+        st.error(f"❌ Falha ao carregar dados de limites: {e}")
+        return {}
+
+def calcula_valor_minimo(unidade, serie_modalidade, limites_dict):
+    """Calcula o valor mínimo negociável com base na planilha 'Limites' ou em um desconto padrão."""
+    chave = (unidade, serie_modalidade)
+    if chave in limites_dict:
+        return limites_dict[chave]
+    else:
+        valor_integral = TUITION.get(serie_modalidade, {}).get("parcela13", 0)
+        return valor_integral * (1 - DESCONTO_MINIMO_PADRAO)
+
+def find_column_index(headers, target_name):
+    """Encontra o índice de uma coluna ignorando espaços e case."""
+    for i, header in enumerate(headers):
+        if header.strip().lower() == target_name.strip().lower():
+            return i + 1
+    return None
 
 # --------------------------------------------------
 # INTERFACE STREAMLIT
 # --------------------------------------------------
+st.set_page_config(page_title="Gestor do Bolsão", layout="centered")
+st.title("🎓 Gestor do Bolsão")
 
-import streamlit as st
-# ... seus outros imports ...
+client = get_gspread_client()
 
-st.set_page_config(page_title="Gerador de Cartas • Bolsão", layout="centered")
+aba_carta, aba_negociacao, aba_ativacao = st.tabs(["Gerar Carta", "Negociação", "Ativação do Bolsão"])
 
-st.title("🎓 Gerador de Cartas de Bolsa & Calculadora de Negociação")
-
-# Conecta ao Google Sheets uma vez no início
-g_client = get_google_sheets_client()
-
-aba_carta, aba_negociacao = st.tabs(["Gerar Carta", "Negociação"])
-
+# --- ABA GERAR CARTA ---
 with aba_carta:
+    st.subheader("Gerar Carta")
+    
+    modo_preenchimento = st.radio(
+        "Selecione o modo de preenchimento:",
+        ["Preencher manualmente", "Carregar dados de um bolsista"],
+        horizontal=True, key="modo_preenchimento"
+    )
+
+    # Valores padrão ou pré-preenchidos
+    nome_aluno_pre = ""
+    turma_aluno_pre = "1ª série do Ensino Médio Regular"
+    unidade_aluno_pre = "BANGU"
+    
+    if modo_preenchimento == "Carregar dados de um bolsista":
+        if client:
+            df_hubspot_all = get_all_hubspot_data(client)
+            if not df_hubspot_all.empty:
+                unidade_selecionada = st.selectbox(
+                    "Selecione a Unidade do bolsista:", UNIDADES_LIMPAS, key="unidade_selecionada_carta"
+                )
+                
+                df_filtrado = df_hubspot_all[df_hubspot_all['Unidade'] == UNIDADES_MAP[unidade_selecionada]]
+                nomes_candidatos = ["Selecione um candidato"] + sorted(df_filtrado['Nome do candidato'].tolist())
+                
+                selecao_candidato = st.selectbox(
+                    "Selecione o candidato da lista:", nomes_candidatos, key="selecao_candidato"
+                )
+                
+                if selecao_candidato != "Selecione um candidato":
+                    candidato_selecionado = df_filtrado[df_filtrado['Nome do candidato'] == selecao_candidato].iloc[0]
+                    nome_aluno_pre = candidato_selecionado.get('Nome do candidato', '')
+                    turma_aluno_pre = candidato_selecionado.get('Turma de Interesse - Geral', '1ª série do Ensino Médio Regular')
+                    unidade_aluno_pre = unidade_selecionada
+                    st.info(f"Dados de {nome_aluno_pre} carregados.")
+            else:
+                st.warning("Nenhum bolsista encontrado para carregar.")
+    
+    st.write("---")
+    
     c1, c2 = st.columns(2)
     with c1:
-        unidade = st.selectbox("Unidade", UNIDADES, index=UNIDADES.index("Bangu"), key="c_unid")
-        turma = st.text_input("Turma de interesse", "1ª série do Ensino Médio Regular", key="c_turma")
+        unidade_limpa_index = UNIDADES_LIMPAS.index(unidade_aluno_pre) if unidade_aluno_pre in UNIDADES_LIMPAS else 0
+        unidade_limpa = st.selectbox("Unidade", UNIDADES_LIMPAS, index=unidade_limpa_index, key="c_unid")
+        turma = st.text_input("Turma de interesse", turma_aluno_pre, key="c_turma")
     with c2:
         ac_mat = st.number_input("Acertos - Matemática", 0, 12, 0, key="c_mat")
         ac_port = st.number_input("Acertos - Português", 0, 12, 0, key="c_port")
-    aluno = st.text_input("Nome completo do candidato", "", key="c_nome")
+    
+    aluno = st.text_input("Nome completo do candidato", nome_aluno_pre, key="c_nome")
 
     total = ac_mat + ac_port
     pct = calcula_bolsa(total)
-    st.markdown(f"### ➔ Bolsa obtida: **{pct*100:.0f}%** ({total} acertos)")
+    st.markdown(f"### ➔ Bolsa obtida: *{pct*100:.0f}%* ({total} acertos)")
 
     serie = st.selectbox("Série / Modalidade", list(TUITION.keys()), key="c_serie")
     val_ano = TUITION[serie]["anuidade"] * (1 - pct)
@@ -129,40 +207,32 @@ with aba_carta:
     if st.button("Gerar Carta PDF", key="c_gerar"):
         if not aluno:
             st.error("Por favor, preencha o nome do candidato.")
-        elif g_client is None:
-            st.error("Não foi possível gerar a carta pois a conexão com a planilha falhou. Verifique as credenciais.")
+        elif client is None:
+            st.error("Não foi possível gerar a carta pois a conexão com a planilha falhou.")
         else:
             hoje = date.today()
             nome_bolsao = "-"
             try:
-                sheet = g_client.open_by_url("https://docs.google.com/spreadsheets/d/1qBV70qrPswnAUDxnHfBgKEU4FYAISpL7iVP0IM9zU2Q/edit#gid=380208567")
+                sheet = client.open_by_url("https://docs.google.com/spreadsheets/d/1qBV70qrPswnAUDxnHfBgKEU4FYAISpL7iVP0IM9zU2Q/edit#gid=380208567")
                 aba_bolsao = sheet.worksheet("Bolsão")
                 dados_bolsao = aba_bolsao.get_all_records()
                 for linha in dados_bolsao:
-                    data_str = linha.get("Data")
-                    bolsao_nome = linha.get("Bolsão")
-                    if data_str and bolsao_nome:
-                        data_bolsao = datetime.strptime(data_str, "%d/%m/%Y").date()
-                        if data_bolsao >= hoje:
-                            nome_bolsao = bolsao_nome
+                    data_str, bolsao_nome_temp = linha.get("Data"), linha.get("Bolsão")
+                    if data_str and bolsao_nome_temp:
+                        if datetime.strptime(data_str, "%d/%m/%Y").date() >= hoje:
+                            nome_bolsao = bolsao_nome_temp
                             break
             except Exception as e:
                 st.warning(f"Não foi possível obter nome do bolsão: {e}")
-
-            unidades_html = "".join(f"<span class='unidade-item'>{u}</span>" for u in UNIDADES)
+            
+            unidades_html = "".join(f"<span class='unidade-item'>{u}</span>" for u in UNIDADES_LIMPAS)
             ctx = {
-                "ano": hoje.year,
-                "unidade": f"Colégio Matriz – {unidade}",
-                "aluno": aluno.strip().title(),
-                "bolsa_pct": f"{pct * 100:.0f}",
-                "acertos_mat": ac_mat,
-                "acertos_port": ac_port,
-                "turma": turma,
-                "n_parcelas": 12,
-                "data_limite": (hoje + timedelta(days=7)).strftime("%d/%m/%Y"),
+                "ano": hoje.year, "unidade": f"Colégio Matriz – {unidade_limpa}",
+                "aluno": aluno.strip().title(), "bolsa_pct": f"{pct * 100:.0f}",
+                "acertos_mat": ac_mat, "acertos_port": ac_port, "turma": turma,
+                "n_parcelas": 12, "data_limite": (hoje + timedelta(days=7)).strftime("%d/%m/%Y"),
                 "anuidade_vista": format_currency(val_ano * 0.93),
-                "primeira_cota": format_currency(val_parc),
-                "valor_parcela": format_currency(val_parc),
+                "primeira_cota": format_currency(val_parc), "valor_parcela": format_currency(val_parc),
                 "unidades_html": unidades_html,
             }
             
@@ -170,18 +240,13 @@ with aba_carta:
             st.success("✅ Carta em PDF gerada com sucesso!")
 
             try:
-                # A variável 'sheet' já deve existir do passo anterior
                 aba_resultados = sheet.worksheet("Resultados_Bolsao")
+                unidade_completa = UNIDADES_MAP[unidade_limpa]
                 nova_linha = [
-                    datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    aluno.strip().title(), unidade, turma,
-                    ac_mat, ac_port, total,
-                    f"{pct*100:.0f}%", serie,
-                    ctx["anuidade_vista"],
-                    ctx["primeira_cota"],
-                    ctx["valor_parcela"],
-                    st.session_state.get("email", "-"),
-                    nome_bolsao
+                    datetime.now().strftime("%Y-%m-%d %H:%M:%S"), aluno.strip().title(), unidade_completa, turma,
+                    ac_mat, ac_port, total, f"{pct*100:.0f}%", serie,
+                    ctx["anuidade_vista"], ctx["primeira_cota"], ctx["valor_parcela"],
+                    st.session_state.get("email", "-"), nome_bolsao
                 ]
                 aba_resultados.append_row(nova_linha, value_input_option="USER_ENTERED")
                 st.info("📊 Resposta registrada na planilha.")
@@ -189,26 +254,129 @@ with aba_carta:
                 st.error(f"❌ Falha ao salvar na planilha: {e}")
 
             st.download_button(
-                "📄 Baixar Carta",
-                data=pdf_bytes,
-                file_name=f"Carta_Bolsa_{aluno.replace(' ', '_')}.pdf",
-                mime="application/pdf"
+                "📄 Baixar Carta", data=pdf_bytes,
+                file_name=f"Carta_Bolsa_{aluno.replace(' ', '_')}.pdf", mime="application/pdf"
             )
 
+# --- ABA NEGOCIAÇÃO ---
 with aba_negociacao:
-    cn1, cn2 = st.columns(2)
-    with cn1:
-        serie_n = st.selectbox("Série / Modalidade", list(TUITION.keys()), key="n_serie")
-        parcelas = st.radio("Parcelas", [12, 13], horizontal=True, key="n_parc")
-    with cn2:
-        valor_neg = st.number_input("Valor negociado por parcela (R$)", min_value=0.0, value=1500.0, step=50.0, key="n_valor")
+    st.subheader("Simulador de Negociação")
+    if client:
+        cn1, cn2 = st.columns(2)
+        with cn1:
+            unidade_neg_limpa = st.selectbox("Unidade", UNIDADES_LIMPAS, key="n_unid")
+            serie_n = st.selectbox("Série / Modalidade", list(TUITION.keys()), key="n_serie")
+        with cn2:
+            parcelas_n = st.radio("Parcelas", [12, 13], horizontal=True, key="n_parc")
 
-    mensal_full = TUITION[serie_n]["parcela13"] if parcelas == 13 else TUITION[serie_n]["anuidade"] / 12
-    pct_req = max(0.0, 1 - valor_neg / mensal_full) if mensal_full > 0 else 0.0
-    st.metric("Bolsa necessária", f"{pct_req*100:.2f}%")
-    pct_lanc = int(round(pct_req * 100 + 0.499))
-    st.write(f"Sugestão de bolsa a lançar: **{pct_lanc}%**")
-    mens_res = mensal_full * (1 - pct_lanc / 100)
-    st.write(f"Parcela resultante: {format_currency(mens_res)} em {parcelas}×")
+        unidade_neg_completa = UNIDADES_MAP[unidade_neg_limpa]
+        limites = get_limites_data(client)
+        valor_minimo = calcula_valor_minimo(unidade_neg_completa, serie_n, limites)
+        
+        st.markdown(f"### ➡️ Valor Mínimo Negociável: *{format_currency(valor_minimo)}*")
+        st.write("---")
+
+        modo_simulacao = st.radio(
+            "Calcular por:", ["Bolsa (%)", "Valor da Parcela (R$)"],
+            horizontal=True, key="modo_sim"
+        )
+        
+        valor_integral_parc = TUITION[serie_n]["parcela13"] if parcelas_n == 13 else TUITION[serie_n]["anuidade"] / 12
+
+        if modo_simulacao == "Bolsa (%)":
+            bolsa_simulada = st.slider("Porcentagem de Bolsa", 0, 100, 30, 1, key="bolsa_sim")
+            valor_resultante = valor_integral_parc * (1 - bolsa_simulada / 100)
+            st.metric("Valor da Parcela Resultante", format_currency(valor_resultante))
+            if valor_resultante < valor_minimo:
+                st.error("❌ Atenção: O valor resultante está abaixo do mínimo negociável!")
+        else: # "Valor da Parcela (R$)"
+            valor_neg = st.number_input("Valor desejado da parcela (R$)", 0.0, value=1500.0, step=10.0, key="valor_neg")
+            pct_req = max(0.0, 1 - valor_neg / valor_integral_parc) if valor_integral_parc > 0 else 0.0
+            bolsa_lanc = int(round(pct_req * 100))
+            st.metric("Bolsa Necessária", f"{pct_req*100:.2f}%")
+            st.write(f"Sugestão de bolsa a lançar: *{bolsa_lanc}%*")
+            if valor_neg < valor_minimo:
+                st.error("❌ Atenção: O valor negociado está abaixo do mínimo negociável!")
+    else:
+        st.warning("Não foi possível conectar ao Google Sheets para a negociação.")
+
+# --- ABA ATIVAÇÃO DO BOLSÃO ---
+with aba_ativacao:
+    st.subheader("Ativação de Bolsão")
+    if client:
+        unidade_ativacao_limpa = st.selectbox("Selecione a Unidade para Ativação", UNIDADES_LIMPAS, key="a_unid")
+        
+        if st.button("Carregar Lista de Bolsistas", key="a_carregar"):
+            unidade_ativacao_completa = UNIDADES_MAP[unidade_ativacao_limpa]
+            df_hubspot = get_all_hubspot_data(client)
+            df_filtrado = df_hubspot[df_hubspot['Unidade'] == unidade_ativacao_completa]
+            st.session_state['df_ativacao'] = df_filtrado
+            st.session_state['unidade_ativa'] = unidade_ativacao_limpa
+
+        if 'df_ativacao' in st.session_state and not st.session_state['df_ativacao'].empty:
+            st.write(f"Lista de bolsistas para a unidade: *{st.session_state['unidade_ativa']}*")
+            df_display = st.session_state['df_ativacao']
+            
+            try:
+                sheet = client.open_by_url("https://docs.google.com/spreadsheets/d/1qBV70qrPswnAUDxnHfBgKEU4FYAISpL7iVP0IM9zU2Q/edit#gid=422747648")
+                aba_hubspot = sheet.worksheet("Hubspot")
+                headers = aba_hubspot.row_values(1)
+                
+                cols = {
+                    'nome': find_column_index(headers, 'Nome do candidato'),
+                    'contato_realizado': find_column_index(headers, 'Contato realizado'),
+                    'status': find_column_index(headers, 'Status do Contato'),
+                    'id': find_column_index(headers, 'Contato ID')
+                }
+
+                if not all([cols['nome'], cols['id']]):
+                    st.warning("⚠️ Colunas 'Nome do candidato' e 'Contato ID' são essenciais e não foram encontradas.")
+                else:
+                    for index, row in df_display.iterrows():
+                        status_atual = str(row.get('Status do Contato', '-')).strip()
+                        contato_realizado_bool = str(row.get('Contato realizado', 'Não')).strip().lower() == "sim"
+                        
+                        emoji = "⚪"
+                        if "confirmado" in status_atual.lower(): emoji = "✅"
+                        elif "não atende" in status_atual.lower(): emoji = "📞"
+                        elif "não comparecerá" in status_atual.lower(): emoji = "❌"
+                        elif contato_realizado_bool: emoji = "✅"
+
+                        expander_title = f"{emoji} *{row.get('Nome do candidato', 'N/A')}* | Status: *{status_atual}* | Cel: {row.get('Celular Tratado', 'N/A')}"
+                        with st.expander(expander_title):
+                            st.markdown(f"""
+                            - **Responsável:** {row.get('Nome', 'N/A')}
+                            - **E-mail:** {row.get('E-mail', 'N/A')}
+                            - **Turma:** {row.get('Turma de Interesse - Geral', 'N/A')}
+                            - **Fonte:** {row.get('Fonte original', 'N/A')}
+                            """)
+                            
+                            novo_nome = st.text_input("Editar Nome", value=row.get('Nome do candidato', ''), key=f"nome_{index}")
+                            
+                            status_options = ["-", "Não atende", "Confirmado", "Não comparecerá"]
+                            status_index = status_options.index(status_atual) if status_atual in status_options else 0
+                            
+                            contato_realizado = st.checkbox("Contato Realizado", value=contato_realizado_bool, key=f"check_{index}")
+                            status_contato = st.selectbox("Status do Contato", status_options, index=status_index, key=f"status_{index}")
+                            
+                            if st.button("Salvar Status", key=f"save_{index}"):
+                                try:
+                                    cell = aba_hubspot.find(str(row.get('Contato ID', '')), in_column=cols['id'])
+                                    if cell:
+                                        aba_hubspot.update_cell(cell.row, cols['nome'], novo_nome)
+                                        if cols['contato_realizado']:
+                                            aba_hubspot.update_cell(cell.row, cols['contato_realizado'], "Sim" if contato_realizado else "Não")
+                                        if cols['status']:
+                                            aba_hubspot.update_cell(cell.row, cols['status'], status_contato)
+                                        st.success(f"Status de {novo_nome} atualizado!")
+                                        st.experimental_rerun()
+                                    else:
+                                        st.error("Candidato não encontrado na planilha para atualização.")
+                                except Exception as e:
+                                    st.error(f"❌ Falha ao atualizar planilha: {e}")
+            except Exception as e:
+                st.error(f"❌ Erro ao processar a aba de ativação: {e}")
+    else:
+        st.warning("Não foi possível conectar ao Google Sheets para a ativação.")
 
 st.caption("Desenvolvido para Matriz Educação • Suporte: TI Interno")
