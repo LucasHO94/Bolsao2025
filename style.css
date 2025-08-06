@@ -337,7 +337,7 @@ th {
   border: 2px solid #000;
   padding: 3px 6px;
   text-align: center;
-  width: 45mm; /* Largura fixa */
+  width: 35mm; /* Largura fixa */
   background: #fff; /* Fundo branco para não ficar transparente sobre a borda verde */
 }
 
@@ -352,3 +352,4 @@ th {
   display: block;
   height: 10mm; /* Espaço para escrever o número */
 }
+
