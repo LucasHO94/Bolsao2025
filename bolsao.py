@@ -150,7 +150,7 @@ with aba_carta:
     
     modo_preenchimento = st.radio(
         "Selecione o modo de preenchimento:",
-        ["Preencher manualmente", "Carregar dados de um bolsista"],
+        ["Preencher manualmente", "Carregar dados de um candidato"],
         horizontal=True, key="modo_preenchimento"
     )
 
@@ -159,12 +159,12 @@ with aba_carta:
     turma_aluno_pre = "1ª série do Ensino Médio Regular"
     unidade_aluno_pre = "BANGU"
     
-    if modo_preenchimento == "Carregar dados de um bolsista":
+    if modo_preenchimento == "Carregar dados de um candidato":
         if client:
             df_hubspot_all = get_all_hubspot_data(client)
             if not df_hubspot_all.empty:
                 unidade_selecionada = st.selectbox(
-                    "Selecione a Unidade do bolsista:", UNIDADES_LIMPAS, key="unidade_selecionada_carta"
+                    "Selecione a Unidade do candidato:", UNIDADES_LIMPAS, key="unidade_selecionada_carta"
                 )
                 
                 df_filtrado = df_hubspot_all[df_hubspot_all['Unidade'] == UNIDADES_MAP[unidade_selecionada]]
@@ -181,7 +181,7 @@ with aba_carta:
                     unidade_aluno_pre = unidade_selecionada
                     st.info(f"Dados de {nome_aluno_pre} carregados.")
             else:
-                st.warning("Nenhum bolsista encontrado para carregar.")
+                st.warning("Nenhum candidato encontrado para carregar.")
     
     st.write("---")
     
@@ -306,7 +306,7 @@ with aba_ativacao:
     if client:
         unidade_ativacao_limpa = st.selectbox("Selecione a Unidade para Ativação", UNIDADES_LIMPAS, key="a_unid")
         
-        if st.button("Carregar Lista de Bolsistas", key="a_carregar"):
+        if st.button("Carregar Lista de Candidatos", key="a_carregar"):
             unidade_ativacao_completa = UNIDADES_MAP[unidade_ativacao_limpa]
             df_hubspot = get_all_hubspot_data(client)
             df_filtrado = df_hubspot[df_hubspot['Unidade'] == unidade_ativacao_completa]
@@ -314,7 +314,7 @@ with aba_ativacao:
             st.session_state['unidade_ativa'] = unidade_ativacao_limpa
 
         if 'df_ativacao' in st.session_state and not st.session_state['df_ativacao'].empty:
-            st.write(f"Lista de bolsistas para a unidade: *{st.session_state['unidade_ativa']}*")
+            st.write(f"Lista de candidatos para a unidade: *{st.session_state['unidade_ativa']}*")
             df_display = st.session_state['df_ativacao']
             
             try:
