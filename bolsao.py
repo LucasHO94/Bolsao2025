@@ -369,7 +369,7 @@ with aba_ativacao:
                                         if cols['status']:
                                             aba_hubspot.update_cell(cell.row, cols['status'], status_contato)
                                         st.success(f"Status de {novo_nome} atualizado!")
-                                        st.experimental_rerun()
+                                        st.rerun()
                                     else:
                                         st.error("Candidato não encontrado na planilha para atualização.")
                                 except Exception as e:
@@ -380,3 +380,4 @@ with aba_ativacao:
         st.warning("Não foi possível conectar ao Google Sheets para a ativação.")
 
 st.caption("Desenvolvido para Matriz Educação • Suporte: TI Interno")
+
