@@ -353,7 +353,7 @@ with aba_ativacao:
                             
                             novo_nome = st.text_input("Editar Nome", value=row.get('Nome do candidato', ''), key=f"nome_{index}")
                             
-                            status_options = ["-", "Não atende", "Confirmado", "Não comparecerá"]
+                            status_options = ["-", "Não atende", "Confirmado", "Não comparecerá","Bolsão Reagendado"]
                             status_index = status_options.index(status_atual) if status_atual in status_options else 0
                             
                             contato_realizado = st.checkbox("Contato Realizado", value=contato_realizado_bool, key=f"check_{index}")
@@ -380,4 +380,5 @@ with aba_ativacao:
         st.warning("Não foi possível conectar ao Google Sheets para a ativação.")
 
 st.caption("Desenvolvido para Matriz Educação • Suporte: TI Interno")
+
 
