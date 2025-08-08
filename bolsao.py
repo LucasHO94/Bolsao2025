@@ -124,6 +124,16 @@ def find_column_index(headers, target_name):
         if header.strip().lower() == target_name.strip().lower():
             return i + 1
     return None
+    
+def calcula_valor_minimo(unidade, serie_modalidade, limites_dict):
+    """Calcula o valor mínimo negociável com base na planilha 'Limites' ou em um desconto padrão."""
+    chave = (unidade, serie_modalidade)
+    if chave in limites_dict:
+        return limites_dict[chave]
+    else:
+        # Se não houver valor na planilha, usa o desconto padrão
+        valor_integral = TUITION.get(serie_modalidade, {}).get("parcela13", 0)
+        return valor_integral * (1 - DESCONTO_MINIMO_PADRAO)
 
 # --------------------------------------------------
 # INTERFACE STREAMLIT
@@ -393,3 +403,4 @@ with aba_ativacao:
         st.warning("Não foi possível conectar ao Google Sheets para a ativação.")
 
 st.caption("Desenvolvido para Matriz Educação • Suporte: TI Interno")
+
