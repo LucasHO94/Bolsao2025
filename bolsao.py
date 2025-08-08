@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Gerador_Carta_Bolsa.py (v5.4 - Versão com correção do erro de atualização)
+Gerador_Carta_Bolsa.py (v5.5 - Versão com correção definitiva)
 -------------------------------------------------
 Aplicação Streamlit que gera cartas, gerencia negociações e ativações de bolsão,
 utilizando WeasyPrint para PDF e Pandas para manipulação de dados.
@@ -313,7 +313,7 @@ with aba_ativacao:
             df_filtrado['__row_index__'] = df_filtrado.index + 2
             st.session_state['df_ativacao'] = df_filtrado.to_dict('records')
             st.session_state['unidade_ativa'] = unidade_ativacao_limpa
-            # Inicializa um dicionário para rastrear alterações, o que é mais robusto
+            # Novo: Dicionário para rastrear alterações, mapeando o índice da linha original
             st.session_state['updates'] = {}
 
         if 'df_ativacao' in st.session_state and st.session_state['df_ativacao']:
@@ -323,9 +323,16 @@ with aba_ativacao:
                 
                 try:
                     for index, row_dict in enumerate(st.session_state['df_ativacao']):
-                        status_atual = str(row_dict.get('Status do Contato', '-')).strip()
-                        contato_realizado_bool = str(row_dict.get('Contato realizado', 'Não')).strip().lower() == "sim"
-                        observacoes_atuais = str(row_dict.get('Observações', ''))
+                        row_num = row_dict['__row_index__']
+                        
+                        # Pegando os valores atuais da planilha (ou os valores já alterados na sessão)
+                        current_data = row_dict
+                        if row_num in st.session_state['updates']:
+                            current_data.update(st.session_state['updates'][row_num])
+
+                        status_atual = str(current_data.get('Status do Contato', '-')).strip()
+                        contato_realizado_bool = str(current_data.get('Contato realizado', 'Não')).strip().lower() == "sim"
+                        observacoes_atuais = str(current_data.get('Observações', ''))
                         
                         emoji = "⚪"
                         if "confirmado" in status_atual.lower(): emoji = "✅"
@@ -333,17 +340,17 @@ with aba_ativacao:
                         elif "não comparecerá" in status_atual.lower(): emoji = "❌"
                         elif contato_realizado_bool: emoji = "✅"
 
-                        expander_title = f"{emoji} *{row_dict.get('Nome do candidato', 'N/A')}* | Status: *{status_atual}* | Cel: {row_dict.get('Celular Tratado', 'N/A')}"
+                        expander_title = f"{emoji} *{current_data.get('Nome do candidato', 'N/A')}* | Status: *{status_atual}* | Cel: {current_data.get('Celular Tratado', 'N/A')}"
                         
                         with st.expander(expander_title):
                             st.markdown(f"""
-                            - **Responsável:** {row_dict.get('Nome', 'N/A')}
-                            - **E-mail:** {row_dict.get('E-mail', 'N/A')}
-                            - **Turma:** {row_dict.get('Turma de Interesse - Geral', 'N/A')}
-                            - **Fonte:** {row_dict.get('Fonte original', 'N/A')}
+                            - **Responsável:** {current_data.get('Nome', 'N/A')}
+                            - **E-mail:** {current_data.get('E-mail', 'N/A')}
+                            - **Turma:** {current_data.get('Turma de Interesse - Geral', 'N/A')}
+                            - **Fonte:** {current_data.get('Fonte original', 'N/A')}
                             """)
                             
-                            novo_nome = st.text_input("Editar Nome", value=row_dict.get('Nome do candidato', ''), key=f"nome_{index}")
+                            novo_nome = st.text_input("Editar Nome", value=current_data.get('Nome do candidato', ''), key=f"nome_{index}")
                             status_options = ["-", "Não atende", "Confirmado", "Não comparecerá","Bolsão Reagendado","Duplicado"]
                             status_index = status_options.index(status_atual) if status_atual in status_options else 0
                             
@@ -351,32 +358,26 @@ with aba_ativacao:
                             status_contato = st.selectbox("Status do Contato", status_options, index=status_index, key=f"status_{index}")
                             novas_observacoes = st.text_area("Observações", value=observacoes_atuais, key=f"obs_{index}")
 
-                            # Usando st.session_state diretamente para rastrear alterações de forma mais confiável
-                            key_prefix = f"form_field_{index}"
-                            if f'{key_prefix}_nome' not in st.session_state:
-                                st.session_state[f'{key_prefix}_nome'] = novo_nome
-                            if f'{key_prefix}_contato_realizado' not in st.session_state:
-                                st.session_state[f'{key_prefix}_contato_realizado'] = contato_realizado
-                            if f'{key_prefix}_status_contato' not in st.session_state:
-                                st.session_state[f'{key_prefix}_status_contato'] = status_contato
-                            if f'{key_prefix}_observacoes' not in st.session_state:
-                                st.session_state[f'{key_prefix}_observacoes'] = novas_observacoes
-
-                            # Verificação de alteração e atualização do dicionário de updates
-                            if (novo_nome != row_dict.get('Nome do candidato', '') or
-                                contato_realizado != contato_realizado_bool or
-                                status_contato != status_atual or
-                                novas_observacoes != observacoes_atuais):
-                                st.session_state['updates'][row_dict['__row_index__']] = {
-                                    'novo_nome': novo_nome,
-                                    'contato_realizado': "Sim" if contato_realizado else "Não",
-                                    'status_contato': status_contato,
-                                    'observacoes': novas_observacoes
-                                }
+                            # Rastreamento de alterações no dicionário
+                            updated_values = {
+                                'Nome do candidato': novo_nome,
+                                'Contato realizado': "Sim" if contato_realizado else "Não",
+                                'Status do Contato': status_contato,
+                                'Observações': novas_observacoes
+                            }
+                            
+                            # Verifica se algum valor mudou em relação ao original
+                            is_changed = False
+                            for key, value in updated_values.items():
+                                if value != row_dict.get(key):
+                                    is_changed = True
+                                    break
+                            
+                            if is_changed:
+                                st.session_state['updates'][row_num] = updated_values
                                 st.info("Alteração pendente. Clique em 'Salvar Todas as Alterações' no final da lista.")
-                            elif row_dict['__row_index__'] in st.session_state['updates']:
-                                # Remove do dicionário se a alteração for desfeita
-                                del st.session_state['updates'][row_dict['__row_index__']]
+                            elif row_num in st.session_state['updates']:
+                                del st.session_state['updates'][row_num]
 
                     submitted = st.form_submit_button("Salvar Todas as Alterações")
 
@@ -398,15 +399,17 @@ with aba_ativacao:
                             else:
                                 cells_to_update = []
                                 for row_num, update_data in st.session_state['updates'].items():
-                                    cells_to_update.append(gspread.Cell(row=row_num, col=cols['nome'], value=update_data['novo_nome']))
-                                    cells_to_update.append(gspread.Cell(row=row_num, col=cols['contato_realizado'], value=update_data['contato_realizado']))
-                                    cells_to_update.append(gspread.Cell(row=row_num, col=cols['status'], value=update_data['status_contato']))
-                                    cells_to_update.append(gspread.Cell(row=row_num, col=cols['observacoes'], value=update_data['observacoes']))
-
-                                aba_hubspot.batch_update(cells_to_update)
-                                st.success("✅ Todos os status e observações foram atualizados com sucesso! A página será recarregada.")
-                                st.session_state['updates'] = {} # Limpa as atualizações após o sucesso
-                                st.rerun()
+                                    cells_to_update.append(gspread.Cell(row=row_num, col=cols['nome'], value=update_data['Nome do candidato']))
+                                    cells_to_update.append(gspread.Cell(row=row_num, col=cols['contato_realizado'], value=update_data['Contato realizado']))
+                                    cells_to_update.append(gspread.Cell(row=row_num, col=cols['status'], value=update_data['Status do Contato']))
+                                    cells_to_update.append(gspread.Cell(row=row_num, col=cols['observacoes'], value=update_data['Observações']))
+                                
+                                # Verifica se a lista de células a ser atualizada não está vazia antes de chamar batch_update
+                                if cells_to_update:
+                                    aba_hubspot.batch_update(cells_to_update)
+                                    st.success("✅ Todos os status e observações foram atualizados com sucesso! A página será recarregada.")
+                                    st.session_state['updates'] = {}
+                                    st.rerun()
 
                         except Exception as e:
                             st.error(f"❌ Falha ao atualizar planilha: {e}")
