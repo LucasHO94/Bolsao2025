@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Gerador_Carta_Bolsa.py (v5.3 - Versão com correção do erro de atualização)
+Gerador_Carta_Bolsa.py (v5.4 - Versão com correção do erro de atualização)
 -------------------------------------------------
 Aplicação Streamlit que gera cartas, gerencia negociações e ativações de bolsão,
 utilizando WeasyPrint para PDF e Pandas para manipulação de dados.
@@ -306,14 +306,15 @@ with aba_ativacao:
     if client:
         unidade_ativacao_limpa = st.selectbox("Selecione a Unidade para Ativação", UNIDADES_LIMPAS, key="a_unid")
         
-        if st.button("Carregar Lista de Candidatos", key="a_carregar") or 'df_ativacao' not in st.session_state:
+        if st.button("Carregar Lista de Candidatos", key="a_carregar"):
             unidade_ativacao_completa = UNIDADES_MAP[unidade_ativacao_limpa]
             df_hubspot = get_all_hubspot_data(client)
             df_filtrado = df_hubspot[df_hubspot['Unidade'] == unidade_ativacao_completa].copy()
             df_filtrado['__row_index__'] = df_filtrado.index + 2
             st.session_state['df_ativacao'] = df_filtrado.to_dict('records')
             st.session_state['unidade_ativa'] = unidade_ativacao_limpa
-            st.session_state['updates_pendentes'] = []
+            # Inicializa um dicionário para rastrear alterações, o que é mais robusto
+            st.session_state['updates'] = {}
 
         if 'df_ativacao' in st.session_state and st.session_state['df_ativacao']:
             st.write(f"Lista de candidatos para a unidade: *{st.session_state['unidade_ativa']}*")
@@ -348,44 +349,38 @@ with aba_ativacao:
                             
                             contato_realizado = st.checkbox("Contato Realizado", value=contato_realizado_bool, key=f"check_{index}")
                             status_contato = st.selectbox("Status do Contato", status_options, index=status_index, key=f"status_{index}")
-                            
                             novas_observacoes = st.text_area("Observações", value=observacoes_atuais, key=f"obs_{index}")
 
-                            # Verificação de alteração e atualização da lista de pendentes
-                            is_changed = (novo_nome != row_dict.get('Nome do candidato', '') or
-                                          contato_realizado != contato_realizado_bool or
-                                          status_contato != status_atual or
-                                          novas_observacoes != observacoes_atuais)
+                            # Usando st.session_state diretamente para rastrear alterações de forma mais confiável
+                            key_prefix = f"form_field_{index}"
+                            if f'{key_prefix}_nome' not in st.session_state:
+                                st.session_state[f'{key_prefix}_nome'] = novo_nome
+                            if f'{key_prefix}_contato_realizado' not in st.session_state:
+                                st.session_state[f'{key_prefix}_contato_realizado'] = contato_realizado
+                            if f'{key_prefix}_status_contato' not in st.session_state:
+                                st.session_state[f'{key_prefix}_status_contato'] = status_contato
+                            if f'{key_prefix}_observacoes' not in st.session_state:
+                                st.session_state[f'{key_prefix}_observacoes'] = novas_observacoes
 
-                            current_updates = st.session_state['updates_pendentes']
-                            existing_update = next((item for item in current_updates if item['index_na_planilha'] == row_dict['__row_index__']), None)
-
-                            if is_changed:
-                                if not existing_update:
-                                    current_updates.append({
-                                        'index_na_planilha': row_dict['__row_index__'],
-                                        'novo_nome': novo_nome,
-                                        'contato_realizado': "Sim" if contato_realizado else "Não",
-                                        'status_contato': status_contato,
-                                        'observacoes': novas_observacoes
-                                    })
-                                else:
-                                    existing_update.update({
-                                        'novo_nome': novo_nome,
-                                        'contato_realizado': "Sim" if contato_realizado else "Não",
-                                        'status_contato': status_contato,
-                                        'observacoes': novas_observacoes
-                                    })
+                            # Verificação de alteração e atualização do dicionário de updates
+                            if (novo_nome != row_dict.get('Nome do candidato', '') or
+                                contato_realizado != contato_realizado_bool or
+                                status_contato != status_atual or
+                                novas_observacoes != observacoes_atuais):
+                                st.session_state['updates'][row_dict['__row_index__']] = {
+                                    'novo_nome': novo_nome,
+                                    'contato_realizado': "Sim" if contato_realizado else "Não",
+                                    'status_contato': status_contato,
+                                    'observacoes': novas_observacoes
+                                }
                                 st.info("Alteração pendente. Clique em 'Salvar Todas as Alterações' no final da lista.")
-                            elif existing_update:
-                                # Remove da lista se a alteração for desfeita
-                                current_updates.remove(existing_update)
-                                st.info("Alteração revertida.")
+                            elif row_dict['__row_index__'] in st.session_state['updates']:
+                                # Remove do dicionário se a alteração for desfeita
+                                del st.session_state['updates'][row_dict['__row_index__']]
 
-                    # Botão para salvar todas as alterações de uma vez
                     submitted = st.form_submit_button("Salvar Todas as Alterações")
 
-                    if submitted and st.session_state['updates_pendentes']:
+                    if submitted and st.session_state['updates']:
                         try:
                             sheet = client.open_by_url("https://docs.google.com/spreadsheets/d/1qBV70qrPswnAUDxnHfBgKEU4FYAISpL7iVP0IM9zU2Q/edit#gid=422747648")
                             aba_hubspot = sheet.worksheet("Hubspot")
@@ -399,23 +394,23 @@ with aba_ativacao:
                             }
 
                             if not all(cols.values()):
-                                st.error("⚠️ Uma ou mais colunas essenciais ('Nome do candidato', 'Contato realizado', 'Status do Contato', 'Observações') não foram encontradas. Verifique a planilha.")
+                                st.error("⚠️ Uma ou mais colunas essenciais não foram encontradas. Verifique a planilha.")
                             else:
                                 cells_to_update = []
-                                for update in st.session_state['updates_pendentes']:
-                                    row_num = update['index_na_planilha']
-                                    cells_to_update.append(gspread.Cell(row=row_num, col=cols['nome'], value=update['novo_nome']))
-                                    cells_to_update.append(gspread.Cell(row=row_num, col=cols['contato_realizado'], value=update['contato_realizado']))
-                                    cells_to_update.append(gspread.Cell(row=row_num, col=cols['status'], value=update['status_contato']))
-                                    cells_to_update.append(gspread.Cell(row=row_num, col=cols['observacoes'], value=update['observacoes']))
+                                for row_num, update_data in st.session_state['updates'].items():
+                                    cells_to_update.append(gspread.Cell(row=row_num, col=cols['nome'], value=update_data['novo_nome']))
+                                    cells_to_update.append(gspread.Cell(row=row_num, col=cols['contato_realizado'], value=update_data['contato_realizado']))
+                                    cells_to_update.append(gspread.Cell(row=row_num, col=cols['status'], value=update_data['status_contato']))
+                                    cells_to_update.append(gspread.Cell(row=row_num, col=cols['observacoes'], value=update_data['observacoes']))
 
                                 aba_hubspot.batch_update(cells_to_update)
                                 st.success("✅ Todos os status e observações foram atualizados com sucesso! A página será recarregada.")
+                                st.session_state['updates'] = {} # Limpa as atualizações após o sucesso
                                 st.rerun()
 
                         except Exception as e:
                             st.error(f"❌ Falha ao atualizar planilha: {e}")
-                    elif submitted and not st.session_state['updates_pendentes']:
+                    elif submitted and not st.session_state['updates']:
                         st.info("Nenhuma alteração a ser salva.")
 
                 except Exception as e:
