@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Gerador_Carta_Bolsa.py (v5.5 - Versão com correção definitiva)
+Gerador_Carta_Bolsa.py (v5.6 - Versão final com correção do erro de atualização)
 -------------------------------------------------
 Aplicação Streamlit que gera cartas, gerencia negociações e ativações de bolsão,
 utilizando WeasyPrint para PDF e Pandas para manipulação de dados.
@@ -322,17 +322,15 @@ with aba_ativacao:
             with st.form("form_atualizacao_bolsao"):
                 
                 try:
+                    # Inicializa o dicionário de alterações para a submissão do formulário
+                    st.session_state['pending_updates'] = {}
+
                     for index, row_dict in enumerate(st.session_state['df_ativacao']):
                         row_num = row_dict['__row_index__']
                         
-                        # Pegando os valores atuais da planilha (ou os valores já alterados na sessão)
-                        current_data = row_dict
-                        if row_num in st.session_state['updates']:
-                            current_data.update(st.session_state['updates'][row_num])
-
-                        status_atual = str(current_data.get('Status do Contato', '-')).strip()
-                        contato_realizado_bool = str(current_data.get('Contato realizado', 'Não')).strip().lower() == "sim"
-                        observacoes_atuais = str(current_data.get('Observações', ''))
+                        status_atual = str(row_dict.get('Status do Contato', '-')).strip()
+                        contato_realizado_bool = str(row_dict.get('Contato realizado', 'Não')).strip().lower() == "sim"
+                        observacoes_atuais = str(row_dict.get('Observações', ''))
                         
                         emoji = "⚪"
                         if "confirmado" in status_atual.lower(): emoji = "✅"
@@ -340,17 +338,17 @@ with aba_ativacao:
                         elif "não comparecerá" in status_atual.lower(): emoji = "❌"
                         elif contato_realizado_bool: emoji = "✅"
 
-                        expander_title = f"{emoji} *{current_data.get('Nome do candidato', 'N/A')}* | Status: *{status_atual}* | Cel: {current_data.get('Celular Tratado', 'N/A')}"
+                        expander_title = f"{emoji} *{row_dict.get('Nome do candidato', 'N/A')}* | Status: *{status_atual}* | Cel: {row_dict.get('Celular Tratado', 'N/A')}"
                         
                         with st.expander(expander_title):
                             st.markdown(f"""
-                            - **Responsável:** {current_data.get('Nome', 'N/A')}
-                            - **E-mail:** {current_data.get('E-mail', 'N/A')}
-                            - **Turma:** {current_data.get('Turma de Interesse - Geral', 'N/A')}
-                            - **Fonte:** {current_data.get('Fonte original', 'N/A')}
+                            - **Responsável:** {row_dict.get('Nome', 'N/A')}
+                            - **E-mail:** {row_dict.get('E-mail', 'N/A')}
+                            - **Turma:** {row_dict.get('Turma de Interesse - Geral', 'N/A')}
+                            - **Fonte:** {row_dict.get('Fonte original', 'N/A')}
                             """)
                             
-                            novo_nome = st.text_input("Editar Nome", value=current_data.get('Nome do candidato', ''), key=f"nome_{index}")
+                            novo_nome = st.text_input("Editar Nome", value=row_dict.get('Nome do candidato', ''), key=f"nome_{index}")
                             status_options = ["-", "Não atende", "Confirmado", "Não comparecerá","Bolsão Reagendado","Duplicado"]
                             status_index = status_options.index(status_atual) if status_atual in status_options else 0
                             
@@ -358,30 +356,24 @@ with aba_ativacao:
                             status_contato = st.selectbox("Status do Contato", status_options, index=status_index, key=f"status_{index}")
                             novas_observacoes = st.text_area("Observações", value=observacoes_atuais, key=f"obs_{index}")
 
-                            # Rastreamento de alterações no dicionário
-                            updated_values = {
-                                'Nome do candidato': novo_nome,
-                                'Contato realizado': "Sim" if contato_realizado else "Não",
-                                'Status do Contato': status_contato,
-                                'Observações': novas_observacoes
-                            }
+                            # Salva as alterações no dicionário pendente para a submissão
+                            if (novo_nome != row_dict.get('Nome do candidato', '') or
+                                contato_realizado != contato_realizado_bool or
+                                status_contato != status_atual or
+                                novas_observacoes != observacoes_atuais):
+                                
+                                st.session_state['pending_updates'][row_num] = {
+                                    'Nome do candidato': novo_nome,
+                                    'Contato realizado': "Sim" if contato_realizado else "Não",
+                                    'Status do Contato': status_contato,
+                                    'Observações': novas_observacoes
+                                }
                             
-                            # Verifica se algum valor mudou em relação ao original
-                            is_changed = False
-                            for key, value in updated_values.items():
-                                if value != row_dict.get(key):
-                                    is_changed = True
-                                    break
-                            
-                            if is_changed:
-                                st.session_state['updates'][row_num] = updated_values
-                                st.info("Alteração pendente. Clique em 'Salvar Todas as Alterações' no final da lista.")
-                            elif row_num in st.session_state['updates']:
-                                del st.session_state['updates'][row_num]
+                            st.info("Alteração pendente. Clique em 'Salvar Todas as Alterações' no final da lista.")
 
                     submitted = st.form_submit_button("Salvar Todas as Alterações")
 
-                    if submitted and st.session_state['updates']:
+                    if submitted and st.session_state['pending_updates']:
                         try:
                             sheet = client.open_by_url("https://docs.google.com/spreadsheets/d/1qBV70qrPswnAUDxnHfBgKEU4FYAISpL7iVP0IM9zU2Q/edit#gid=422747648")
                             aba_hubspot = sheet.worksheet("Hubspot")
@@ -398,22 +390,21 @@ with aba_ativacao:
                                 st.error("⚠️ Uma ou mais colunas essenciais não foram encontradas. Verifique a planilha.")
                             else:
                                 cells_to_update = []
-                                for row_num, update_data in st.session_state['updates'].items():
+                                for row_num, update_data in st.session_state['pending_updates'].items():
                                     cells_to_update.append(gspread.Cell(row=row_num, col=cols['nome'], value=update_data['Nome do candidato']))
                                     cells_to_update.append(gspread.Cell(row=row_num, col=cols['contato_realizado'], value=update_data['Contato realizado']))
                                     cells_to_update.append(gspread.Cell(row=row_num, col=cols['status'], value=update_data['Status do Contato']))
                                     cells_to_update.append(gspread.Cell(row=row_num, col=cols['observacoes'], value=update_data['Observações']))
                                 
-                                # Verifica se a lista de células a ser atualizada não está vazia antes de chamar batch_update
                                 if cells_to_update:
                                     aba_hubspot.batch_update(cells_to_update)
                                     st.success("✅ Todos os status e observações foram atualizados com sucesso! A página será recarregada.")
-                                    st.session_state['updates'] = {}
+                                    st.session_state['pending_updates'] = {}
                                     st.rerun()
 
                         except Exception as e:
                             st.error(f"❌ Falha ao atualizar planilha: {e}")
-                    elif submitted and not st.session_state['updates']:
+                    elif submitted and not st.session_state['pending_updates']:
                         st.info("Nenhuma alteração a ser salva.")
 
                 except Exception as e:
