@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Gerador_Carta_Bolsa.py (v5.1 - Versão Unificada e Otimizada)
+Gerador_Carta_Bolsa.py (v5.3 - Versão com correção do erro de atualização)
 -------------------------------------------------
 Aplicação Streamlit que gera cartas, gerencia negociações e ativações de bolsão,
 utilizando WeasyPrint para PDF e Pandas para manipulação de dados.
@@ -117,6 +117,15 @@ def get_limites_data(client):
     except Exception as e:
         st.error(f"❌ Falha ao carregar dados de limites: {e}")
         return {}
+        
+def calcula_valor_minimo(unidade, serie_modalidade, limites_dict):
+    """Calcula o valor mínimo negociável com base na planilha 'Limites' ou em um desconto padrão."""
+    chave = (unidade, serie_modalidade)
+    if chave in limites_dict:
+        return limites_dict[chave]
+    else:
+        valor_integral = TUITION.get(serie_modalidade, {}).get("parcela13", 0)
+        return valor_integral * (1 - DESCONTO_MINIMO_PADRAO)
 
 def find_column_index(headers, target_name):
     """Encontra o índice de uma coluna ignorando espaços e case."""
@@ -124,16 +133,6 @@ def find_column_index(headers, target_name):
         if header.strip().lower() == target_name.strip().lower():
             return i + 1
     return None
-    
-def calcula_valor_minimo(unidade, serie_modalidade, limites_dict):
-    """Calcula o valor mínimo negociável com base na planilha 'Limites' ou em um desconto padrão."""
-    chave = (unidade, serie_modalidade)
-    if chave in limites_dict:
-        return limites_dict[chave]
-    else:
-        # Se não houver valor na planilha, usa o desconto padrão
-        valor_integral = TUITION.get(serie_modalidade, {}).get("parcela13", 0)
-        return valor_integral * (1 - DESCONTO_MINIMO_PADRAO)
 
 # --------------------------------------------------
 # INTERFACE STREAMLIT
@@ -155,7 +154,6 @@ with aba_carta:
         horizontal=True, key="modo_preenchimento"
     )
 
-    # Valores padrão ou pré-preenchidos
     nome_aluno_pre = ""
     turma_aluno_pre = "1ª série do Ensino Médio Regular"
     unidade_aluno_pre = "BANGU"
@@ -291,7 +289,7 @@ with aba_negociacao:
             st.metric("Valor da Parcela Resultante", format_currency(valor_resultante))
             if valor_resultante < valor_minimo:
                 st.error("❌ Atenção: O valor resultante está abaixo do mínimo negociável!")
-        else: # "Valor da Parcela (R$)"
+        else:
             valor_neg = st.number_input("Valor desejado da parcela (R$)", 0.0, value=1500.0, step=10.0, key="valor_neg")
             pct_req = max(0.0, 1 - valor_neg / valor_integral_parc) if valor_integral_parc > 0 else 0.0
             bolsa_lanc = int(round(pct_req * 100))
@@ -312,11 +310,9 @@ with aba_ativacao:
             unidade_ativacao_completa = UNIDADES_MAP[unidade_ativacao_limpa]
             df_hubspot = get_all_hubspot_data(client)
             df_filtrado = df_hubspot[df_hubspot['Unidade'] == unidade_ativacao_completa].copy()
-            # Adiciona o índice da linha original para usar na atualização
             df_filtrado['__row_index__'] = df_filtrado.index + 2
             st.session_state['df_ativacao'] = df_filtrado.to_dict('records')
             st.session_state['unidade_ativa'] = unidade_ativacao_limpa
-            # Reinicia a lista de atualizações pendentes
             st.session_state['updates_pendentes'] = []
 
         if 'df_ativacao' in st.session_state and st.session_state['df_ativacao']:
@@ -328,7 +324,7 @@ with aba_ativacao:
                     for index, row_dict in enumerate(st.session_state['df_ativacao']):
                         status_atual = str(row_dict.get('Status do Contato', '-')).strip()
                         contato_realizado_bool = str(row_dict.get('Contato realizado', 'Não')).strip().lower() == "sim"
-                        observacoes_atuais = str(row_dict.get('Observações', '')) # Pega o valor atual da coluna Observações
+                        observacoes_atuais = str(row_dict.get('Observações', ''))
                         
                         emoji = "⚪"
                         if "confirmado" in status_atual.lower(): emoji = "✅"
@@ -353,35 +349,38 @@ with aba_ativacao:
                             contato_realizado = st.checkbox("Contato Realizado", value=contato_realizado_bool, key=f"check_{index}")
                             status_contato = st.selectbox("Status do Contato", status_options, index=status_index, key=f"status_{index}")
                             
-                            # Adiciona um campo de texto para as observações
                             novas_observacoes = st.text_area("Observações", value=observacoes_atuais, key=f"obs_{index}")
 
-                            # Adicione uma flag para detectar se algo foi alterado
-                            if (novo_nome != row_dict.get('Nome do candidato', '') or
-                                contato_realizado != contato_realizado_bool or
-                                status_contato != status_atual or
-                                novas_observacoes != observacoes_atuais):
-                                
-                                # Verifica se a linha já foi adicionada para atualização
-                                if not any(up['index_na_planilha'] == row_dict['__row_index__'] for up in st.session_state['updates_pendentes']):
-                                    st.session_state['updates_pendentes'].append({
+                            # Verificação de alteração e atualização da lista de pendentes
+                            is_changed = (novo_nome != row_dict.get('Nome do candidato', '') or
+                                          contato_realizado != contato_realizado_bool or
+                                          status_contato != status_atual or
+                                          novas_observacoes != observacoes_atuais)
+
+                            current_updates = st.session_state['updates_pendentes']
+                            existing_update = next((item for item in current_updates if item['index_na_planilha'] == row_dict['__row_index__']), None)
+
+                            if is_changed:
+                                if not existing_update:
+                                    current_updates.append({
                                         'index_na_planilha': row_dict['__row_index__'],
                                         'novo_nome': novo_nome,
                                         'contato_realizado': "Sim" if contato_realizado else "Não",
                                         'status_contato': status_contato,
                                         'observacoes': novas_observacoes
                                     })
-                                    st.info("Alteração pendente. Clique em 'Salvar Todas as Alterações' no final da lista.")
-                                # Se já existe, atualiza os valores
                                 else:
-                                    for up in st.session_state['updates_pendentes']:
-                                        if up['index_na_planilha'] == row_dict['__row_index__']:
-                                            up['novo_nome'] = novo_nome
-                                            up['contato_realizado'] = "Sim" if contato_realizado else "Não"
-                                            up['status_contato'] = status_contato
-                                            up['observacoes'] = novas_observacoes
-                                            break
-
+                                    existing_update.update({
+                                        'novo_nome': novo_nome,
+                                        'contato_realizado': "Sim" if contato_realizado else "Não",
+                                        'status_contato': status_contato,
+                                        'observacoes': novas_observacoes
+                                    })
+                                st.info("Alteração pendente. Clique em 'Salvar Todas as Alterações' no final da lista.")
+                            elif existing_update:
+                                # Remove da lista se a alteração for desfeita
+                                current_updates.remove(existing_update)
+                                st.info("Alteração revertida.")
 
                     # Botão para salvar todas as alterações de uma vez
                     submitted = st.form_submit_button("Salvar Todas as Alterações")
@@ -396,7 +395,7 @@ with aba_ativacao:
                                 'nome': find_column_index(headers, 'Nome do candidato'),
                                 'contato_realizado': find_column_index(headers, 'Contato realizado'),
                                 'status': find_column_index(headers, 'Status do Contato'),
-                                'observacoes': find_column_index(headers, 'Observações') # Novo: Pega o índice da coluna Observações
+                                'observacoes': find_column_index(headers, 'Observações')
                             }
 
                             if not all(cols.values()):
@@ -405,10 +404,10 @@ with aba_ativacao:
                                 cells_to_update = []
                                 for update in st.session_state['updates_pendentes']:
                                     row_num = update['index_na_planilha']
-                                    cells_to_update.append(gspread.Cell(row_num, cols['nome'], update['novo_nome']))
-                                    cells_to_update.append(gspread.Cell(row_num, cols['contato_realizado'], update['contato_realizado']))
-                                    cells_to_update.append(gspread.Cell(row_num, cols['status'], update['status_contato']))
-                                    cells_to_update.append(gspread.Cell(row_num, cols['observacoes'], update['observacoes'])) # Novo: Adiciona a observação
+                                    cells_to_update.append(gspread.Cell(row=row_num, col=cols['nome'], value=update['novo_nome']))
+                                    cells_to_update.append(gspread.Cell(row=row_num, col=cols['contato_realizado'], value=update['contato_realizado']))
+                                    cells_to_update.append(gspread.Cell(row=row_num, col=cols['status'], value=update['status_contato']))
+                                    cells_to_update.append(gspread.Cell(row=row_num, col=cols['observacoes'], value=update['observacoes']))
 
                                 aba_hubspot.batch_update(cells_to_update)
                                 st.success("✅ Todos os status e observações foram atualizados com sucesso! A página será recarregada.")
