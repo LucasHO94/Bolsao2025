@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Gerador_Carta_Bolsa.py (v5.6 - Versão final com correção do erro de atualização)
+Gerador_Carta_Bolsa.py (v5.7 - Versão com salvamento individual)
 -------------------------------------------------
 Aplicação Streamlit que gera cartas, gerencia negociações e ativações de bolsão,
 utilizando WeasyPrint para PDF e Pandas para manipulação de dados.
@@ -322,9 +322,6 @@ with aba_ativacao:
             with st.form("form_atualizacao_bolsao"):
                 
                 try:
-                    # Inicializa o dicionário de alterações para a submissão do formulário
-                    st.session_state['pending_updates'] = {}
-
                     for index, row_dict in enumerate(st.session_state['df_ativacao']):
                         row_num = row_dict['__row_index__']
                         
@@ -356,24 +353,26 @@ with aba_ativacao:
                             status_contato = st.selectbox("Status do Contato", status_options, index=status_index, key=f"status_{index}")
                             novas_observacoes = st.text_area("Observações", value=observacoes_atuais, key=f"obs_{index}")
 
-                            # Salva as alterações no dicionário pendente para a submissão
-                            if (novo_nome != row_dict.get('Nome do candidato', '') or
-                                contato_realizado != contato_realizado_bool or
-                                status_contato != status_atual or
-                                novas_observacoes != observacoes_atuais):
-                                
-                                st.session_state['pending_updates'][row_num] = {
-                                    'Nome do candidato': novo_nome,
-                                    'Contato realizado': "Sim" if contato_realizado else "Não",
-                                    'Status do Contato': status_contato,
-                                    'Observações': novas_observacoes
-                                }
+                            # Rastreamento de alterações no dicionário
+                            is_changed = (novo_nome != row_dict.get('Nome do candidato', '') or
+                                          ("Sim" if contato_realizado else "Não") != row_dict.get('Contato realizado', 'Não') or
+                                          status_contato != status_atual or
+                                          novas_observacoes != observacoes_atuais)
                             
-                            st.info("Alteração pendente. Clique em 'Salvar Todas as Alterações' no final da lista.")
+                            if is_changed:
+                                st.session_state['updates'][row_num] = {
+                                    'nome': novo_nome,
+                                    'contato_realizado': "Sim" if contato_realizado else "Não",
+                                    'status_contato': status_contato,
+                                    'observacoes': novas_observacoes
+                                }
+                                st.info("Alteração pendente. Clique em 'Salvar Todas as Alterações' no final da lista.")
+                            elif row_num in st.session_state['updates']:
+                                del st.session_state['updates'][row_num]
 
                     submitted = st.form_submit_button("Salvar Todas as Alterações")
 
-                    if submitted and st.session_state['pending_updates']:
+                    if submitted and st.session_state['updates']:
                         try:
                             sheet = client.open_by_url("https://docs.google.com/spreadsheets/d/1qBV70qrPswnAUDxnHfBgKEU4FYAISpL7iVP0IM9zU2Q/edit#gid=422747648")
                             aba_hubspot = sheet.worksheet("Hubspot")
@@ -389,22 +388,24 @@ with aba_ativacao:
                             if not all(cols.values()):
                                 st.error("⚠️ Uma ou mais colunas essenciais não foram encontradas. Verifique a planilha.")
                             else:
-                                cells_to_update = []
-                                for row_num, update_data in st.session_state['pending_updates'].items():
-                                    cells_to_update.append(gspread.Cell(row=row_num, col=cols['nome'], value=update_data['Nome do candidato']))
-                                    cells_to_update.append(gspread.Cell(row=row_num, col=cols['contato_realizado'], value=update_data['Contato realizado']))
-                                    cells_to_update.append(gspread.Cell(row=row_num, col=cols['status'], value=update_data['Status do Contato']))
-                                    cells_to_update.append(gspread.Cell(row=row_num, col=cols['observacoes'], value=update_data['Observações']))
+                                updates_count = len(st.session_state['updates'])
+                                progress_bar = st.progress(0, text=f"Atualizando 0 de {updates_count} candidatos...")
                                 
-                                if cells_to_update:
-                                    aba_hubspot.batch_update(cells_to_update)
-                                    st.success("✅ Todos os status e observações foram atualizados com sucesso! A página será recarregada.")
-                                    st.session_state['pending_updates'] = {}
-                                    st.rerun()
+                                for i, (row_num, update_data) in enumerate(st.session_state['updates'].items()):
+                                    aba_hubspot.update_cell(row_num, cols['nome'], update_data['nome'])
+                                    aba_hubspot.update_cell(row_num, cols['contato_realizado'], update_data['contato_realizado'])
+                                    aba_hubspot.update_cell(row_num, cols['status'], update_data['status_contato'])
+                                    aba_hubspot.update_cell(row_num, cols['observacoes'], update_data['observacoes'])
+                                    progress_bar.progress((i + 1) / updates_count, text=f"Atualizando {i+1} de {updates_count} candidatos...")
+                                
+                                progress_bar.empty()
+                                st.success("✅ Todos os status e observações foram atualizados com sucesso! A página será recarregada.")
+                                st.session_state['updates'] = {}
+                                st.rerun()
 
                         except Exception as e:
                             st.error(f"❌ Falha ao atualizar planilha: {e}")
-                    elif submitted and not st.session_state['pending_updates']:
+                    elif submitted and not st.session_state['updates']:
                         st.info("Nenhuma alteração a ser salva.")
 
                 except Exception as e:
