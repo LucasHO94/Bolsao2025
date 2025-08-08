@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Gerador_Carta_Bolsa.py (v6.0 - Versão final com correção de cota de leitura)
+Gerador_Carta_Bolsa.py (v6.1 - Versão com cache e filtro aprimorados)
 -------------------------------------------------
 Aplicação Streamlit que gera cartas, gerencia negociações e ativações de bolsão,
 utilizando WeasyPrint para PDF e Pandas para manipulação de dados.
@@ -89,7 +89,9 @@ def get_gspread_client():
         st.error(f"❌ Erro de autenticação com o Google Sheets: {e}")
         return None
 
-@st.cache_data(ttl=600)
+# Alteração aqui: removi o ttl para forçar o cache a durar mais, o que evita a cota de leitura,
+# e adicionamos um botão para forçar a atualização manualmente.
+@st.cache_data(ttl=None)
 def get_all_hubspot_data(_client):
     """Obtém todos os dados da aba 'Hubspot'."""
     try:
@@ -100,7 +102,7 @@ def get_all_hubspot_data(_client):
     except Exception as e:
         st.error(f"❌ Falha ao carregar dados do Hubspot: {e}")
         return pd.DataFrame()
-
+    
 def get_limites_data(client):
     """Obtém dados da aba 'Limites' e retorna como dicionário."""
     try:
@@ -322,18 +324,24 @@ with aba_ativacao:
     if client:
         unidade_ativacao_limpa = st.selectbox("Selecione a Unidade para Ativação", UNIDADES_LIMPAS, key="a_unid")
         
-        if st.button("Carregar Lista de Candidatos", key="a_carregar"):
-            unidade_ativacao_completa = UNIDADES_MAP[unidade_ativacao_limpa]
-            # Novo: Carrega os dados para o estado da sessão e os mantém lá
-            df_hubspot = get_all_hubspot_data(client)
-            if not df_hubspot.empty:
-                df_filtrado = df_hubspot[df_hubspot['Unidade'] == unidade_ativacao_completa].copy()
-                df_filtrado['__row_index__'] = df_filtrado.index + 2
-                st.session_state['df_ativacao'] = df_filtrado.to_dict('records')
-                st.session_state['unidade_ativa'] = unidade_ativacao_limpa
-            else:
-                st.session_state['df_ativacao'] = []
-            st.rerun()
+        col1, col2 = st.columns([1, 1])
+        with col1:
+            if st.button("Carregar Lista de Candidatos", key="a_carregar"):
+                df_hubspot = get_all_hubspot_data(client)
+                if not df_hubspot.empty and 'Unidade' in df_hubspot.columns:
+                    # Filtra por nome limpo, que é o que o usuário seleciona
+                    df_filtrado = df_hubspot[df_hubspot['Unidade'].str.contains(unidade_ativacao_limpa, case=False, na=False)].copy()
+                    df_filtrado['__row_index__'] = df_filtrado.index + 2
+                    st.session_state['df_ativacao'] = df_filtrado.to_dict('records')
+                    st.session_state['unidade_ativa'] = unidade_ativacao_limpa
+                else:
+                    st.session_state['df_ativacao'] = []
+                st.rerun()
+        with col2:
+            if st.button("Forçar atualização dos dados da planilha", key="a_recarregar_cache"):
+                # Limpa o cache da função de leitura da planilha
+                get_all_hubspot_data.clear()
+                st.rerun()
 
         if 'df_ativacao' in st.session_state and st.session_state['df_ativacao']:
             st.write(f"Lista de candidatos para a unidade: *{st.session_state['unidade_ativa']}*")
@@ -362,7 +370,6 @@ with aba_ativacao:
                         - **Fonte:** {row_dict.get('Fonte original', 'N/A')}
                         """)
                         
-                        # Cada interação com o widget de entrada de dados aciona o callback de atualização
                         novo_nome = st.text_input("Editar Nome", value=row_dict.get('Nome do candidato', ''), key=f"nome_{index}")
                         if novo_nome != row_dict.get('Nome do candidato', ''):
                             update_cell_in_gsheet(client, row_num, 'Nome do candidato', novo_nome)
