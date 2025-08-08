@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Gerador_Carta_Bolsa.py (v5.7 - Versão com salvamento individual)
+Gerador_Carta_Bolsa.py (v5.8 - Versão com correção do batch_update e controle de updates)
 -------------------------------------------------
 Aplicação Streamlit que gera cartas, gerencia negociações e ativações de bolsão,
 utilizando WeasyPrint para PDF e Pandas para manipulação de dados.
@@ -313,7 +313,6 @@ with aba_ativacao:
             df_filtrado['__row_index__'] = df_filtrado.index + 2
             st.session_state['df_ativacao'] = df_filtrado.to_dict('records')
             st.session_state['unidade_ativa'] = unidade_ativacao_limpa
-            # Novo: Dicionário para rastrear alterações, mapeando o índice da linha original
             st.session_state['updates'] = {}
 
         if 'df_ativacao' in st.session_state and st.session_state['df_ativacao']:
@@ -378,6 +377,7 @@ with aba_ativacao:
                             aba_hubspot = sheet.worksheet("Hubspot")
                             headers = aba_hubspot.row_values(1)
                             
+                            # Mapeia os cabeçalhos para os índices das colunas
                             cols = {
                                 'nome': find_column_index(headers, 'Nome do candidato'),
                                 'contato_realizado': find_column_index(headers, 'Contato realizado'),
@@ -388,20 +388,18 @@ with aba_ativacao:
                             if not all(cols.values()):
                                 st.error("⚠️ Uma ou mais colunas essenciais não foram encontradas. Verifique a planilha.")
                             else:
-                                updates_count = len(st.session_state['updates'])
-                                progress_bar = st.progress(0, text=f"Atualizando 0 de {updates_count} candidatos...")
+                                cells_to_update = []
+                                for row_num, update_data in st.session_state['updates'].items():
+                                    cells_to_update.append(gspread.Cell(row=row_num, col=cols['nome'], value=update_data['nome']))
+                                    cells_to_update.append(gspread.Cell(row=row_num, col=cols['contato_realizado'], value=update_data['contato_realizado']))
+                                    cells_to_update.append(gspread.Cell(row=row_num, col=cols['status'], value=update_data['status_contato']))
+                                    cells_to_update.append(gspread.Cell(row=row_num, col=cols['observacoes'], value=update_data['observacoes']))
                                 
-                                for i, (row_num, update_data) in enumerate(st.session_state['updates'].items()):
-                                    aba_hubspot.update_cell(row_num, cols['nome'], update_data['nome'])
-                                    aba_hubspot.update_cell(row_num, cols['contato_realizado'], update_data['contato_realizado'])
-                                    aba_hubspot.update_cell(row_num, cols['status'], update_data['status_contato'])
-                                    aba_hubspot.update_cell(row_num, cols['observacoes'], update_data['observacoes'])
-                                    progress_bar.progress((i + 1) / updates_count, text=f"Atualizando {i+1} de {updates_count} candidatos...")
-                                
-                                progress_bar.empty()
-                                st.success("✅ Todos os status e observações foram atualizados com sucesso! A página será recarregada.")
-                                st.session_state['updates'] = {}
-                                st.rerun()
+                                if cells_to_update:
+                                    aba_hubspot.batch_update(cells_to_update)
+                                    st.success("✅ Todos os status e observações foram atualizados com sucesso! A página será recarregada.")
+                                    st.session_state['updates'] = {}
+                                    st.rerun()
 
                         except Exception as e:
                             st.error(f"❌ Falha ao atualizar planilha: {e}")
