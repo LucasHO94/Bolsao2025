@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Gerador_Carta_Bolsa.py (v5.9 - Versão com salvamento imediato por card)
+Gerador_Carta_Bolsa.py (v6.0 - Versão final com correção de cota de leitura)
 -------------------------------------------------
 Aplicação Streamlit que gera cartas, gerencia negociações e ativações de bolsão,
 utilizando WeasyPrint para PDF e Pandas para manipulação de dados.
@@ -134,7 +134,6 @@ def find_column_index(headers, target_name):
             return i + 1
     return None
 
-# Função para atualizar uma célula individualmente
 def update_cell_in_gsheet(client, row_num, col_name, new_value):
     try:
         sheet = client.open_by_url("https://docs.google.com/spreadsheets/d/1qBV70qrPswnAUDxnHfBgKEU4FYAISpL7iVP0IM9zU2Q/edit#gid=422747648")
@@ -325,13 +324,15 @@ with aba_ativacao:
         
         if st.button("Carregar Lista de Candidatos", key="a_carregar"):
             unidade_ativacao_completa = UNIDADES_MAP[unidade_ativacao_limpa]
+            # Novo: Carrega os dados para o estado da sessão e os mantém lá
             df_hubspot = get_all_hubspot_data(client)
-            df_filtrado = df_hubspot[df_hubspot['Unidade'] == unidade_ativacao_completa].copy()
-            df_filtrado['__row_index__'] = df_filtrado.index + 2
-            st.session_state['df_ativacao'] = df_filtrado.to_dict('records')
-            st.session_state['unidade_ativa'] = unidade_ativacao_limpa
-            # Novo: Dicionário para rastrear alterações, mapeando o índice da linha original
-            st.session_state['updates'] = {}
+            if not df_hubspot.empty:
+                df_filtrado = df_hubspot[df_hubspot['Unidade'] == unidade_ativacao_completa].copy()
+                df_filtrado['__row_index__'] = df_filtrado.index + 2
+                st.session_state['df_ativacao'] = df_filtrado.to_dict('records')
+                st.session_state['unidade_ativa'] = unidade_ativacao_limpa
+            else:
+                st.session_state['df_ativacao'] = []
             st.rerun()
 
         if 'df_ativacao' in st.session_state and st.session_state['df_ativacao']:
@@ -383,6 +384,8 @@ with aba_ativacao:
                 
             except Exception as e:
                 st.error(f"❌ Erro ao processar a aba de ativação: {e}")
+        elif 'df_ativacao' in st.session_state and not st.session_state['df_ativacao']:
+            st.info("Nenhum candidato encontrado para a unidade selecionada.")
     else:
         st.warning("Não foi possível conectar ao Google Sheets para a ativação.")
 
