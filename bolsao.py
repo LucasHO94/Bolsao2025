@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Gerador_Carta_Bolsa.py (v5.0 - Versão Unificada)
+Gerador_Carta_Bolsa.py (v5.1 - Versão Unificada e Otimizada)
 -------------------------------------------------
 Aplicação Streamlit que gera cartas, gerencia negociações e ativações de bolsão,
 utilizando WeasyPrint para PDF e Pandas para manipulação de dados.
@@ -118,15 +118,6 @@ def get_limites_data(client):
         st.error(f"❌ Falha ao carregar dados de limites: {e}")
         return {}
 
-def calcula_valor_minimo(unidade, serie_modalidade, limites_dict):
-    """Calcula o valor mínimo negociável com base na planilha 'Limites' ou em um desconto padrão."""
-    chave = (unidade, serie_modalidade)
-    if chave in limites_dict:
-        return limites_dict[chave]
-    else:
-        valor_integral = TUITION.get(serie_modalidade, {}).get("parcela13", 0)
-        return valor_integral * (1 - DESCONTO_MINIMO_PADRAO)
-
 def find_column_index(headers, target_name):
     """Encontra o índice de uma coluna ignorando espaços e case."""
     for i, header in enumerate(headers):
@@ -240,6 +231,7 @@ with aba_carta:
             st.success("✅ Carta em PDF gerada com sucesso!")
 
             try:
+                sheet = client.open_by_url("https://docs.google.com/spreadsheets/d/1qBV70qrPswnAUDxnHfBgKEU4FYAISpL7iVP0IM9zU2Q/edit#gid=422747648")
                 aba_resultados = sheet.worksheet("Resultados_Bolsao")
                 unidade_completa = UNIDADES_MAP[unidade_limpa]
                 nova_linha = [
@@ -306,35 +298,27 @@ with aba_ativacao:
     if client:
         unidade_ativacao_limpa = st.selectbox("Selecione a Unidade para Ativação", UNIDADES_LIMPAS, key="a_unid")
         
-        if st.button("Carregar Lista de Candidatos", key="a_carregar"):
+        # Otimização: Carrega os dados uma única vez e armazena em cache de sessão
+        if st.button("Carregar Lista de Candidatos", key="a_carregar") or 'df_ativacao' not in st.session_state:
             unidade_ativacao_completa = UNIDADES_MAP[unidade_ativacao_limpa]
             df_hubspot = get_all_hubspot_data(client)
-            df_filtrado = df_hubspot[df_hubspot['Unidade'] == unidade_ativacao_completa]
-            st.session_state['df_ativacao'] = df_filtrado
+            df_filtrado = df_hubspot[df_hubspot['Unidade'] == unidade_ativacao_completa].copy()
+            # Adiciona o índice da linha original para usar na atualização
+            df_filtrado['__row_index__'] = df_filtrado.index + 2  # +2 pois o get_all_records começa da linha 2
+            st.session_state['df_ativacao'] = df_filtrado.to_dict('records')
             st.session_state['unidade_ativa'] = unidade_ativacao_limpa
 
-        if 'df_ativacao' in st.session_state and not st.session_state['df_ativacao'].empty:
+        if 'df_ativacao' in st.session_state and st.session_state['df_ativacao']:
             st.write(f"Lista de candidatos para a unidade: *{st.session_state['unidade_ativa']}*")
-            df_display = st.session_state['df_ativacao']
             
-            try:
-                sheet = client.open_by_url("https://docs.google.com/spreadsheets/d/1qBV70qrPswnAUDxnHfBgKEU4FYAISpL7iVP0IM9zU2Q/edit#gid=422747648")
-                aba_hubspot = sheet.worksheet("Hubspot")
-                headers = aba_hubspot.row_values(1)
+            # Use um formulário para agrupar todas as atualizações
+            with st.form("form_atualizacao_bolsao"):
+                updates_pendentes = []
                 
-                cols = {
-                    'nome': find_column_index(headers, 'Nome do candidato'),
-                    'contato_realizado': find_column_index(headers, 'Contato realizado'),
-                    'status': find_column_index(headers, 'Status do Contato'),
-                    'id': find_column_index(headers, 'Contato ID')
-                }
-
-                if not all([cols['nome'], cols['id']]):
-                    st.warning("⚠️ Colunas 'Nome do candidato' e 'Contato ID' são essenciais e não foram encontradas.")
-                else:
-                    for index, row in df_display.iterrows():
-                        status_atual = str(row.get('Status do Contato', '-')).strip()
-                        contato_realizado_bool = str(row.get('Contato realizado', 'Não')).strip().lower() == "sim"
+                try:
+                    for index, row_dict in enumerate(st.session_state['df_ativacao']):
+                        status_atual = str(row_dict.get('Status do Contato', '-')).strip()
+                        contato_realizado_bool = str(row_dict.get('Contato realizado', 'Não')).strip().lower() == "sim"
                         
                         emoji = "⚪"
                         if "confirmado" in status_atual.lower(): emoji = "✅"
@@ -342,44 +326,70 @@ with aba_ativacao:
                         elif "não comparecerá" in status_atual.lower(): emoji = "❌"
                         elif contato_realizado_bool: emoji = "✅"
 
-                        expander_title = f"{emoji} *{row.get('Nome do candidato', 'N/A')}* | Status: *{status_atual}* | Cel: {row.get('Celular Tratado', 'N/A')}"
+                        expander_title = f"{emoji} *{row_dict.get('Nome do candidato', 'N/A')}* | Status: *{status_atual}* | Cel: {row_dict.get('Celular Tratado', 'N/A')}"
+                        
                         with st.expander(expander_title):
                             st.markdown(f"""
-                            - **Responsável:** {row.get('Nome', 'N/A')}
-                            - **E-mail:** {row.get('E-mail', 'N/A')}
-                            - **Turma:** {row.get('Turma de Interesse - Geral', 'N/A')}
-                            - **Fonte:** {row.get('Fonte original', 'N/A')}
+                            - **Responsável:** {row_dict.get('Nome', 'N/A')}
+                            - **E-mail:** {row_dict.get('E-mail', 'N/A')}
+                            - **Turma:** {row_dict.get('Turma de Interesse - Geral', 'N/A')}
+                            - **Fonte:** {row_dict.get('Fonte original', 'N/A')}
                             """)
                             
-                            novo_nome = st.text_input("Editar Nome", value=row.get('Nome do candidato', ''), key=f"nome_{index}")
-                            
+                            novo_nome = st.text_input("Editar Nome", value=row_dict.get('Nome do candidato', ''), key=f"nome_{index}")
                             status_options = ["-", "Não atende", "Confirmado", "Não comparecerá","Bolsão Reagendado","Duplicado"]
                             status_index = status_options.index(status_atual) if status_atual in status_options else 0
                             
                             contato_realizado = st.checkbox("Contato Realizado", value=contato_realizado_bool, key=f"check_{index}")
                             status_contato = st.selectbox("Status do Contato", status_options, index=status_index, key=f"status_{index}")
                             
-                            if st.button("Salvar Status", key=f"save_{index}"):
-                                try:
-                                    cell = aba_hubspot.find(str(row.get('Contato ID', '')), in_column=cols['id'])
-                                    if cell:
-                                        aba_hubspot.update_cell(cell.row, cols['nome'], novo_nome)
-                                        if cols['contato_realizado']:
-                                            aba_hubspot.update_cell(cell.row, cols['contato_realizado'], "Sim" if contato_realizado else "Não")
-                                        if cols['status']:
-                                            aba_hubspot.update_cell(cell.row, cols['status'], status_contato)
-                                        st.success(f"Status de {novo_nome} atualizado!")
-                                        st.rerun()
-                                    else:
-                                        st.error("Candidato não encontrado na planilha para atualização.")
-                                except Exception as e:
-                                    st.error(f"❌ Falha ao atualizar planilha: {e}")
-            except Exception as e:
-                st.error(f"❌ Erro ao processar a aba de ativação: {e}")
+                            # Adicione uma flag para detectar se algo foi alterado
+                            if novo_nome != row_dict.get('Nome do candidato', '') or contato_realizado != contato_realizado_bool or status_contato != status_atual:
+                                updates_pendentes.append({
+                                    'index_na_planilha': row_dict['__row_index__'],
+                                    'novo_nome': novo_nome,
+                                    'contato_realizado': "Sim" if contato_realizado else "Não",
+                                    'status_contato': status_contato
+                                })
+                                st.info("Alteração pendente. Clique em 'Salvar Todas as Alterações' no final da lista.")
+
+                    # Botão para salvar todas as alterações de uma vez
+                    submitted = st.form_submit_button("Salvar Todas as Alterações")
+
+                    if submitted and updates_pendentes:
+                        try:
+                            sheet = client.open_by_url("https://docs.google.com/spreadsheets/d/1qBV70qrPswnAUDxnHfBgKEU4FYAISpL7iVP0IM9zU2Q/edit#gid=422747648")
+                            aba_hubspot = sheet.worksheet("Hubspot")
+                            headers = aba_hubspot.row_values(1)
+                            
+                            cols = {
+                                'nome': find_column_index(headers, 'Nome do candidato'),
+                                'contato_realizado': find_column_index(headers, 'Contato realizado'),
+                                'status': find_column_index(headers, 'Status do Contato')
+                            }
+
+                            if not all(cols.values()):
+                                st.error("⚠️ Uma ou mais colunas essenciais ('Nome do candidato', 'Contato realizado', 'Status do Contato') não foram encontradas. Verifique a planilha.")
+                            else:
+                                cells_to_update = []
+                                for update in updates_pendentes:
+                                    row_num = update['index_na_planilha']
+                                    cells_to_update.append(gspread.Cell(row_num, cols['nome'], update['novo_nome']))
+                                    cells_to_update.append(gspread.Cell(row_num, cols['contato_realizado'], update['contato_realizado']))
+                                    cells_to_update.append(gspread.Cell(row_num, cols['status'], update['status_contato']))
+
+                                aba_hubspot.batch_update(cells_to_update)
+                                st.success("✅ Todos os status foram atualizados com sucesso! A página será recarregada.")
+                                st.rerun()
+
+                        except Exception as e:
+                            st.error(f"❌ Falha ao atualizar planilha: {e}")
+                    elif submitted and not updates_pendentes:
+                        st.info("Nenhuma alteração a ser salva.")
+
+                except Exception as e:
+                    st.error(f"❌ Erro ao processar a aba de ativação: {e}")
     else:
         st.warning("Não foi possível conectar ao Google Sheets para a ativação.")
 
 st.caption("Desenvolvido para Matriz Educação • Suporte: TI Interno")
-
-
-
