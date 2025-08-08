@@ -26,21 +26,21 @@ BOLSA_MAP = {
 }
 
 TUITION = {
-    "1ª e 2ª Série EM Militar": {"anuidade": 33036.00, "parcela13": 2541.23},
-    "1ª e 2ª Série EM Vestibular": {"anuidade": 33036.00, "parcela13": 2541.23},
-    "1º ao 5º Ano": {"anuidade": 24013.00, "parcela13": 1847.15},
-    "3ª Série (PV/PM)": {"anuidade": 33164.00, "parcela13": 2551.08},
-    "3ª Série EM Medicina": {"anuidade": 33164.00, "parcela13": 2551.08},
-    "6º ao 8º Ano": {"anuidade": 28247.00, "parcela13": 2172.85},
-    "9º Ano EF II Militar": {"anuidade": 30762.00, "parcela13": 2366.31},
-    "9º Ano EF II Vestibular": {"anuidade": 30762.00, "parcela13": 2366.31},
-    "AFA/EN/EFOMM": {"anuidade": 13335.00, "parcela13": 1025.77},
-    "CN/EPCAr": {"anuidade": 7985.00, "parcela13": 614.23},
-    "ESA": {"anuidade": 6437.00, "parcela13": 495.15},
-    "EsPCEx": {"anuidade": 13335.00, "parcela13": 1025.77},
-    "IME/ITA": {"anuidade": 13335.00, "parcela13": 1025.77},
-    "Medicina (Pré)": {"anuidade": 13335.00, "parcela13": 1025.77},
-    "Pré-Vestibular": {"anuidade": 13335.00, "parcela13": 1025.77},
+    "1ª e 2ª Série EM Militar": {"anuidade": 36339.60, "parcela13": 2795.35},
+    "1ª e 2ª Série EM Vestibular": {"anuidade": 36339.60, "parcela13": 2795.35},
+    "1º ao 5º Ano": {"anuidade": 26414.30, "parcela13": 2031.87},
+    "3ª Série (PV/PM)": {"anuidade": 36480.40, "parcela13": 2806.19},
+    "3ª Série EM Medicina": {"anuidade": 36480.40, "parcela13": 2806.19},
+    "6º ao 8º Ano": {"anuidade": 31071.70, "parcela13": 2390.14},
+    "9º Ano EF II Militar": {"anuidade": 33838.20, "parcela13": 2602.94},
+    "9º Ano EF II Vestibular": {"anuidade": 33838.20, "parcela13": 2602.94},
+    "AFA/EN/EFOMM": {"anuidade": 14668.50, "parcela13": 1128.35},
+    "CN/EPCAr": {"anuidade": 8783.50, "parcela13": 675.65},
+    "ESA": {"anuidade": 7080.70, "parcela13": 544.67},
+    "EsPCEx": {"anuidade": 14668.50, "parcela13": 1128.35},
+    "IME/ITA": {"anuidade": 14668.50, "parcela13": 1128.35},
+    "Medicina (Pré)": {"anuidade": 14668.50, "parcela13": 1128.35},
+    "Pré-Vestibular": {"anuidade": 14668.50, "parcela13": 1128.35},
 }
 
 # Sistema de Unidades aprimorado
@@ -389,3 +389,4 @@ with aba_ativacao:
         st.warning("Não foi possível conectar ao Google Sheets para a ativação.")
 
 st.caption("Desenvolvido para Matriz Educação • Suporte: TI Interno")
+
