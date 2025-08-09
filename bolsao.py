@@ -240,7 +240,7 @@ with aba_carta:
                 "aluno": aluno.strip().title(), "bolsa_pct": f"{pct * 100:.0f}",
                 "acertos_mat": ac_mat, "acertos_port": ac_port, "turma": turma,
                 "n_parcelas": 12, "data_limite": (hoje + timedelta(days=7)).strftime("%d/%m/%Y"),
-                "anuidade_vista": format_currency(val_ano * 0.93),
+                "anuidade_vista": format_currency(val_ano * 0.95),
                 "primeira_cota": format_currency(val_parc), "valor_parcela": format_currency(val_parc),
                 "unidades_html": unidades_html,
             }
@@ -396,3 +396,4 @@ with aba_ativacao:
             st.info("Nenhum candidato encontrado para a unidade selecionada.")
     else:
         st.warning("Não foi possível conectar ao Google Sheets para a ativação.")
+
