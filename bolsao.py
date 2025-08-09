@@ -277,7 +277,8 @@ with aba_negociacao:
             unidade_neg_limpa = st.selectbox("Unidade", UNIDADES_LIMPAS, key="n_unid")
             serie_n = st.selectbox("Série / Modalidade", list(TUITION.keys()), key="n_serie")
         with cn2:
-            parcelas_n = st.radio("Parcelas", [12, 13], horizontal=True, key="n_parc")
+            # A alteração foi feita aqui: [13, 12] e index=0 para ser a opção padrão
+            parcelas_n = st.radio("Parcelas", [13, 12], horizontal=True, index=0, key="n_parc")
 
         # Chama a função que agora usa apenas o dicionário interno
         valor_minimo = calcula_valor_minimo(unidade_neg_limpa, serie_n)
@@ -395,4 +396,3 @@ with aba_ativacao:
             st.info("Nenhum candidato encontrado para a unidade selecionada.")
     else:
         st.warning("Não foi possível conectar ao Google Sheets para a ativação.")
-
