@@ -1,9 +1,15 @@
 # -*- coding: utf-8 -*-
 """
-Gerador_Carta_Bolsa.py (v5.1 - Versão Unificada com Observações)
+Gerador_Carta_Bolsa.py (v6.0 - Versão Unificada com Observações)
 -------------------------------------------------
 Aplicação Streamlit que gera cartas, gerencia negociações e ativações de bolsão,
 utilizando WeasyPrint para PDF e Pandas para manipulação de dados.
+
+# Histórico de alterações
+# v6.0 - 09/08/2025: Adicionada a funcionalidade de sincronização entre os
+# campos de 'Turma de interesse' e 'Série / Modalidade' na aba 'Gerar Carta',
+# conforme a solicitação do usuário. Agora ambos os campos são `selectbox` e
+# se espelham mutuamente.
 """
 import io
 from datetime import date, timedelta, datetime
@@ -197,7 +203,7 @@ with aba_carta:
 
     # Valores padrão ou pré-preenchidos
     nome_aluno_pre = ""
-    turma_aluno_pre = "1ª série do Ensino Médio Regular"
+    turma_aluno_pre = "1ª e 2ª Série EM Vestibular" # Valor padrão atualizado para ser válido
     unidade_aluno_pre = "BANGU"
     
     if modo_preenchimento == "Carregar dados de um candidato":
@@ -218,7 +224,12 @@ with aba_carta:
                 if selecao_candidato != "Selecione um candidato":
                     candidato_selecionado = df_filtrado[df_filtrado['Nome do candidato'] == selecao_candidato].iloc[0]
                     nome_aluno_pre = candidato_selecionado.get('Nome do candidato', '')
-                    turma_aluno_pre = candidato_selecionado.get('Turma de Interesse - Geral', '1ª série do Ensino Médio Regular')
+                    
+                    # Atualiza o estado da sessão imediatamente após carregar os dados
+                    turma_aluno_pre = candidato_selecionado.get('Turma de Interesse - Geral', '1ª e 2ª Série EM Vestibular')
+                    st.session_state["c_turma"] = turma_aluno_pre
+                    st.session_state["c_serie"] = turma_aluno_pre
+
                     unidade_aluno_pre = unidade_selecionada
                     st.info(f"Dados de {nome_aluno_pre} carregados.")
             else:
@@ -226,11 +237,36 @@ with aba_carta:
     
     st.write("---")
     
+    # --- opções e sincronização Turma/Série ---
+    opcoes_series = list(TUITION.keys())
+    def _normaliza_turma(valor):
+        return valor if valor in opcoes_series else opcoes_series[0]
+        
+    # Callbacks para espelhar
+    def sync_from_turma():
+        st.session_state["c_serie"] = st.session_state.get("c_turma", opcoes_series[0])
+    
+    def sync_from_serie():
+        st.session_state["c_turma"] = st.session_state.get("c_serie", opcoes_series[0])
+    
+    # Estado inicial (considera preenchido manual e o carregado do Hubspot)
+    if "c_turma" not in st.session_state:
+        st.session_state["c_turma"] = _normaliza_turma(turma_aluno_pre)
+    if "c_serie" not in st.session_state:
+        st.session_state["c_serie"] = st.session_state["c_turma"]
+
     c1, c2 = st.columns(2)
     with c1:
         unidade_limpa_index = UNIDADES_LIMPAS.index(unidade_aluno_pre) if unidade_aluno_pre in UNIDADES_LIMPAS else 0
         unidade_limpa = st.selectbox("Unidade", UNIDADES_LIMPAS, index=unidade_limpa_index, key="c_unid")
-        turma = st.text_input("Turma de interesse", turma_aluno_pre, key="c_turma")
+    
+        turma = st.selectbox(
+            "Turma de interesse",
+            opcoes_series,
+            index=opcoes_series.index(st.session_state["c_turma"]),
+            key="c_turma",
+            on_change=sync_from_turma
+        )
     with c2:
         ac_mat = st.number_input("Acertos - Matemática", 0, 12, 0, key="c_mat")
         ac_port = st.number_input("Acertos - Português", 0, 12, 0, key="c_port")
@@ -241,9 +277,16 @@ with aba_carta:
     pct = calcula_bolsa(total)
     st.markdown(f"### ➔ Bolsa obtida: *{pct*100:.0f}%* ({total} acertos)")
 
-    serie = st.selectbox("Série / Modalidade", list(TUITION.keys()), key="c_serie")
+    # Usa o novo selectbox sincronizado
+    serie = st.selectbox(
+        "Série / Modalidade",
+        opcoes_series,
+        index=opcoes_series.index(st.session_state["c_serie"]),
+        key="c_serie",
+        on_change=sync_from_serie
+    )
 
-    precos = precos_2026(serie)
+    precos = precos_2026(st.session_state["c_serie"])
 
     # aplica bolsa
     val_ano = precos["anuidade"] * (1 - pct)
@@ -275,7 +318,7 @@ with aba_carta:
             ctx = {
                 "ano": hoje.year, "unidade": f"Colégio Matriz – {unidade_limpa}",
                 "aluno": aluno.strip().title(), "bolsa_pct": f"{pct * 100:.0f}",
-                "acertos_mat": ac_mat, "acertos_port": ac_port, "turma": turma,
+                "acertos_mat": ac_mat, "acertos_port": ac_port, "turma": st.session_state["c_turma"],
                 "n_parcelas": 12, "data_limite": (hoje + timedelta(days=7)).strftime("%d/%m/%Y"),
                 "anuidade_vista": format_currency(val_ano * 0.95),
                 "primeira_cota": format_currency(val_primeira_cota),
@@ -291,8 +334,8 @@ with aba_carta:
                 aba_resultados = sheet.worksheet("Resultados_Bolsao")
                 unidade_completa = UNIDADES_MAP[unidade_limpa]
                 nova_linha = [
-                    datetime.now().strftime("%Y-%m-%d %H:%M:%S"), aluno.strip().title(), unidade_completa, turma,
-                    ac_mat, ac_port, total, f"{pct*100:.0f}%", serie,
+                    datetime.now().strftime("%Y-%m-%d %H:%M:%S"), aluno.strip().title(), unidade_completa, st.session_state["c_turma"],
+                    ac_mat, ac_port, total, f"{pct*100:.0f}%", st.session_state["c_serie"],
                     ctx["anuidade_vista"], ctx["primeira_cota"], ctx["valor_parcela"],
                     st.session_state.get("email", "-"), nome_bolsao
                 ]
@@ -437,3 +480,4 @@ with aba_ativacao:
             st.info("Nenhum candidato encontrado para a unidade selecionada.")
     else:
         st.warning("Não foi possível conectar ao Google Sheets para a ativação.")
+
