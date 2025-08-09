@@ -68,6 +68,39 @@ DESCONTOS_MAXIMOS_POR_UNIDADE = {
     "SÃO JOÃO DE MERITI": 0.7197,
 }
 
+# --- PREÇOS 2026 CORRIGIDOS A PARTIR DO TUITION ATUAL (+10%) ---
+def precos_2026(serie_modalidade: str) -> dict:
+    """
+    A partir do TUITION atual (que está com +10% nas 13 cotas),
+    reconstrói os preços CORRETOS para 2026:
+      - primeira_cota: igual à parcela de 2025
+      - parcela_mensal: parcela de 2025 reajustada em 9,3%
+      - anuidade: primeira_cota + 12 * parcela_mensal
+    Obs.: Considera que TUITION[serie]['parcela13'] atual = parcela_2025 * 1.10
+    """
+    base = TUITION.get(serie_modalidade, {})
+    if not base:
+        return {"primeira_cota": 0.0, "parcela_mensal": 0.0, "anuidade": 0.0}
+
+    # parcela_2026_do_dict = parcela_2025 * 1.10  (estado atual do seu TUITION)
+    parcela_2026_do_dict = float(base.get("parcela13", 0.0))
+    if parcela_2026_do_dict <= 0:
+        return {"primeira_cota": 0.0, "parcela_mensal": 0.0, "anuidade": 0.0}
+
+    # Recupera a parcela 2025
+    parcela_2025 = round(parcela_2026_do_dict / 1.10, 2)
+
+    # Regra nova:
+    primeira_cota = parcela_2025
+    parcela_mensal = round(parcela_2025 * 1.093, 2)  # 12 parcelas reajustadas em 9,3%
+    anuidade = round(primeira_cota + 12 * parcela_mensal, 2)
+
+    return {
+        "primeira_cota": primeira_cota,
+        "parcela_mensal": parcela_mensal,    # usar no lugar de 'parcela13' para as 12 demais
+        "anuidade": anuidade,                # total do ano (1ª + 12 reajustadas)
+    }
+
 # --------------------------------------------------
 # FUNÇÕES DE LÓGICA E UTILITÁRIOS
 # --------------------------------------------------
@@ -115,25 +148,24 @@ def get_all_hubspot_data(_client):
 
 def calcula_valor_minimo(unidade, serie_modalidade):
     """
-    Calcula o valor mínimo negociável usando APENAS o dicionário local.
+    Calcula o valor mínimo negociável usando APENAS os dicionários locais
+    e a regra 2026 correta.
     """
     try:
-        # Pega o desconto máximo da unidade, se não encontrar, retorna 0
         desconto_maximo = DESCONTOS_MAXIMOS_POR_UNIDADE.get(unidade, 0)
-        
-        # Pega o valor da anuidade para a série/modalidade
-        valor_anuidade_integral = TUITION.get(serie_modalidade, {}).get("anuidade", 0)
 
-        # O valor mínimo negociável é a anuidade descontada do desconto máximo,
-        # dividido pelo número de parcelas (12)
+        precos = precos_2026(serie_modalidade)
+        valor_anuidade_integral = precos.get("anuidade", 0.0)
+
+        # mínimo/mês: aplica desconto na anuidade e divide por 12
         if valor_anuidade_integral > 0 and desconto_maximo > 0:
             valor_minimo_anual = valor_anuidade_integral * (1 - desconto_maximo)
             return valor_minimo_anual / 12
         else:
-            return 0
+            return 0.0
     except Exception as e:
         st.error(f"❌ Erro ao calcular valor mínimo: {e}")
-        return 0
+        return 0.0
 
 
 def find_column_index(headers, target_name):
@@ -210,8 +242,13 @@ with aba_carta:
     st.markdown(f"### ➔ Bolsa obtida: *{pct*100:.0f}%* ({total} acertos)")
 
     serie = st.selectbox("Série / Modalidade", list(TUITION.keys()), key="c_serie")
-    val_ano = TUITION[serie]["anuidade"] * (1 - pct)
-    val_parc = TUITION[serie]["parcela13"] * (1 - pct)
+
+    precos = precos_2026(serie)
+
+    # aplica bolsa
+    val_ano = precos["anuidade"] * (1 - pct)
+    val_parcela_mensal = precos["parcela_mensal"] * (1 - pct)
+    val_primeira_cota = precos["primeira_cota"] * (1 - pct)
 
     if st.button("Gerar Carta PDF", key="c_gerar"):
         if not aluno:
@@ -241,7 +278,8 @@ with aba_carta:
                 "acertos_mat": ac_mat, "acertos_port": ac_port, "turma": turma,
                 "n_parcelas": 12, "data_limite": (hoje + timedelta(days=7)).strftime("%d/%m/%Y"),
                 "anuidade_vista": format_currency(val_ano * 0.95),
-                "primeira_cota": format_currency(val_parc), "valor_parcela": format_currency(val_parc),
+                "primeira_cota": format_currency(val_primeira_cota),
+                "valor_parcela": format_currency(val_parcela_mensal),
                 "unidades_html": unidades_html,
             }
             
@@ -291,7 +329,10 @@ with aba_negociacao:
             horizontal=True, key="modo_sim"
         )
         
-        valor_integral_parc = TUITION[serie_n]["parcela13"] if parcelas_n == 13 else TUITION[serie_n]["anuidade"] / 12
+        precos_n = precos_2026(serie_n)
+        # Para negociar o valor “por parcela”, faz sentido usar a parcela mensal corrigida (as 12 iguais),
+        # independentemente de 12 ou 13, porque a 1ª cota do plano 13 é um valor único.
+        valor_integral_parc = precos_n["parcela_mensal"]
 
         if modo_simulacao == "Bolsa (%)":
             bolsa_simulada = st.slider("Porcentagem de Bolsa", 0, 100, 30, 1, key="bolsa_sim")
@@ -396,4 +437,3 @@ with aba_ativacao:
             st.info("Nenhum candidato encontrado para a unidade selecionada.")
     else:
         st.warning("Não foi possível conectar ao Google Sheets para a ativação.")
-
