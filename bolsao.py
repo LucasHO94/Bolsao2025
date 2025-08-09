@@ -117,10 +117,23 @@ def calcula_valor_minimo(unidade, serie_modalidade):
     """
     Calcula o valor mínimo negociável usando APENAS o dicionário local.
     """
-    # Usa o nome "limpo" da unidade para buscar no dicionário de descontos
-    desconto_maximo = DESCONTOS_MAXIMOS_POR_UNIDADE.get(unidade, 0.60)
-    valor_integral = TUITION.get(serie_modalidade, {}).get("parcela13", 0)
-    return valor_integral * (1 - desconto_maximo)
+    try:
+        # Pega o desconto máximo da unidade, se não encontrar, retorna 0
+        desconto_maximo = DESCONTOS_MAXIMOS_POR_UNIDADE.get(unidade, 0)
+        
+        # Pega o valor da anuidade para a série/modalidade
+        valor_anuidade_integral = TUITION.get(serie_modalidade, {}).get("anuidade", 0)
+
+        # O valor mínimo negociável é a anuidade descontada do desconto máximo,
+        # dividido pelo número de parcelas (12)
+        if valor_anuidade_integral > 0 and desconto_maximo > 0:
+            valor_minimo_anual = valor_anuidade_integral * (1 - desconto_maximo)
+            return valor_minimo_anual / 12
+        else:
+            return 0
+    except Exception as e:
+        st.error(f"❌ Erro ao calcular valor mínimo: {e}")
+        return 0
 
 
 def find_column_index(headers, target_name):
