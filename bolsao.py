@@ -54,7 +54,7 @@ UNIDADES_COMPLETAS = [
 UNIDADES_MAP = {name.replace("COLEGIO E CURSO MATRIZ EDUCACAO", "").replace("COLEGIO E CURSO MATRIZ EDUCAÇÃO", "").strip(): name for name in UNIDADES_COMPLETAS}
 UNIDADES_LIMPAS = sorted(list(UNIDADES_MAP.keys()))
 
-# Limites de desconto adaptados por unidade
+# Limites de desconto adaptados por unidade (usando o nome limpo como chave)
 DESCONTOS_MAXIMOS_POR_UNIDADE = {
     "Retiro dos Artistas": 0.50,
     "Campo Grande": 0.6320,
@@ -145,6 +145,8 @@ def calcula_valor_minimo(unidade, serie_modalidade, limites_dict):
         return limites_dict[chave]
     else:
         # Usa o nome "limpo" da unidade para buscar no dicionário de descontos
+        # O valor do desconto é um percentual, então para encontrar o valor mínimo
+        # é preciso fazer 1 - (desconto)
         desconto_maximo = DESCONTOS_MAXIMOS_POR_UNIDADE.get(unidade, 0.60)
         valor_integral = TUITION.get(serie_modalidade, {}).get("parcela13", 0)
         return valor_integral * (1 - desconto_maximo)
