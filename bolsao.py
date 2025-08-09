@@ -54,7 +54,19 @@ UNIDADES_COMPLETAS = [
 UNIDADES_MAP = {name.replace("COLEGIO E CURSO MATRIZ EDUCACAO", "").replace("COLEGIO E CURSO MATRIZ EDUCAÇÃO", "").strip(): name for name in UNIDADES_COMPLETAS}
 UNIDADES_LIMPAS = sorted(list(UNIDADES_MAP.keys()))
 
-DESCONTO_MINIMO_PADRAO = 0.60
+# Limites de desconto adaptados por unidade
+DESCONTOS_MAXIMOS_POR_UNIDADE = {
+    "Retiro dos Artistas": 0.50,
+    "Campo Grande": 0.6320,
+    "Rocha Miranda": 0.6606,
+    "Taquara": 0.6755,
+    "Nova Iguaçu": 0.6700,
+    "Duque de Caxias": 0.6823,
+    "Bangu": 0.6806,
+    "Madureira": 0.7032,
+    "Tijuca": 0.6800,
+    "São João De Meriti": 0.7197,
+}
 
 # --------------------------------------------------
 # FUNÇÕES DE LÓGICA E UTILITÁRIOS
@@ -102,7 +114,10 @@ def get_all_hubspot_data(_client):
         return pd.DataFrame()
 
 def get_limites_data(client):
-    """Obtém dados da aba 'Limites' e retorna como dicionário."""
+    """
+    Obtém dados da aba 'Limites' e retorna como dicionário.
+    Prioriza a planilha, mas usa os valores do código como fallback.
+    """
     try:
         sheet = client.open_by_url("https://docs.google.com/spreadsheets/d/1qBV70qrPswnAUDxnHfBgKEU4FYAISpL7iVP0IM9zU2Q/edit#gid=422747648")
         aba_limites = sheet.worksheet("Limites")
@@ -115,17 +130,25 @@ def get_limites_data(client):
                 limites_dict[chave] = valor
         return limites_dict
     except Exception as e:
-        st.error(f"❌ Falha ao carregar dados de limites: {e}")
+        st.warning(f"⚠️ Falha ao carregar dados de limites da planilha, usando valores padrão do código: {e}")
         return {}
 
 def calcula_valor_minimo(unidade, serie_modalidade, limites_dict):
-    """Calcula o valor mínimo negociável com base na planilha 'Limites' ou em um desconto padrão."""
-    chave = (unidade, serie_modalidade)
+    """
+    Calcula o valor mínimo negociável.
+    - Se encontrar na planilha, usa o valor de lá.
+    - Se não, usa o desconto máximo da unidade (agora em DESCONTOS_MAXIMOS_POR_UNIDADE).
+    """
+    # A chave na planilha usa o nome completo da unidade
+    chave = (UNIDADES_MAP.get(unidade, unidade), serie_modalidade)
     if chave in limites_dict:
         return limites_dict[chave]
     else:
+        # Usa o nome "limpo" da unidade para buscar no dicionário de descontos
+        desconto_maximo = DESCONTOS_MAXIMOS_POR_UNIDADE.get(unidade, 0.60)
         valor_integral = TUITION.get(serie_modalidade, {}).get("parcela13", 0)
-        return valor_integral * (1 - DESCONTO_MINIMO_PADRAO)
+        return valor_integral * (1 - desconto_maximo)
+
 
 def find_column_index(headers, target_name):
     """Encontra o índice de uma coluna ignorando espaços e case."""
@@ -270,9 +293,8 @@ with aba_negociacao:
         with cn2:
             parcelas_n = st.radio("Parcelas", [12, 13], horizontal=True, key="n_parc")
 
-        unidade_neg_completa = UNIDADES_MAP[unidade_neg_limpa]
         limites = get_limites_data(client)
-        valor_minimo = calcula_valor_minimo(unidade_neg_completa, serie_n, limites)
+        valor_minimo = calcula_valor_minimo(unidade_neg_limpa, serie_n, limites)
         
         st.markdown(f"### ➡️ Valor Mínimo Negociável: *{format_currency(valor_minimo)}*")
         st.write("---")
@@ -387,6 +409,3 @@ with aba_ativacao:
             st.info("Nenhum candidato encontrado para a unidade selecionada.")
     else:
         st.warning("Não foi possível conectar ao Google Sheets para a ativação.")
-
-st.caption("Desenvolvido para Matriz Educação • Suporte: TI Interno")
-
