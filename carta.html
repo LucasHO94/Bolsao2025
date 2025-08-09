@@ -1,198 +1,204 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-    <meta charset="utf-8">
-    <title>Carta de Bolsa</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="style.css">
+    <meta charset="utf-8">
+    <title>Carta de Bolsa</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div class="pagina">
-        <div class="container">
-            <div class="ordem-atendimento-box">
-                <span class="ordem-label">Ordem de <br>Atendimento</span>
-                <span class="ordem-numero"></span>
-            </div>
-            <img src="images/logo.png" alt="Matriz Logotipo" class="logo">
-            <h1>BOLSÃO 2026</h1>
-            <h2 class="subtitulo">{{unidade}}</h2>
-            <p class="intro">
-                Seja bem-vindo(a) ao Matriz Educação {{unidade}}! Nossa escola é a concretização da vivência de um
-                grupo de educadores muito experiente, que acredita que a única forma de mudar a realidade do nosso país é
-                através de uma política pedagógica baseada em valores, atrelada à alta performance. Acreditamos que, com
-                base em planejamento, estudo, determinação e confiança, qualquer sonho poderá ser alcançado.
-            </p>
-            <p class="center"><strong>JUNTOS construiremos o caminho até SEU SONHO!</strong></p>
-            <p class="center">
-                <span class="parabens"><strong>Parabéns, {{aluno}}!</strong></span><br>
-                <span class="bolsa">Você conquistou <strong>BOLSA de {{bolsa_pct}}%</strong>, com {{acertos_mat}} acertos em Matemática e {{acertos_port}} em Português,<br>
-                para a turma <strong>{{turma}}</strong>.</span>
-            </p>
-            <p class="planos"><strong>Veja os planos de pagamento para estudar conosco com essa bolsa:</strong></p>
-            <table class="pag1">
-                <tr>
-                    <th>Anuidade à Vista (-7%) até {{data_limite}}</th>
-                    <th>1ª Cota</th>
-                    <th>{{n_parcelas}}× Cotas (Jan a Dez)</th>
-                </tr>
-                <tr>
-                    <td>{{anuidade_vista}}</td>
-                    <td>{{primeira_cota}}</td>
-                    <td>{{valor_parcela}}</td>
-                </tr>
-            </table>
-            <p class="small"><strong> Documentos para matrícula</strong></p><br>
-            <p class="documentos">Responsável financeiro: RG, CPF e comprovante de residência;<br>
-                Aluno: RG, CPF, certidão de nascimento, atestado de fator RH, declaração escolar, histórico escolar e 2 fotos 3×4.
-            </p>
-            <p class="center2"><strong>Garanta sua vaga!</strong></p>
-            <p class="small2">
-                <span class="horario">Horário de funcionamento: 2ª a 6ª feira (7h às 19h) sábado (8h às 12h).</span>
-                <span class="data_limite">OBS: Essa bolsa é válida até o dia {{data_limite}}</span>
-                <div class="unidades-container">
-                    {{unidades_html}}
-                </div>
-            </p>
-        </div>
-    </div>
+    <div class="pagina">
+        <div class="container">
+            <div class="ordem-atendimento-box">
+                <span class="ordem-label">Ordem de <br>Atendimento</span>
+                <span class="ordem-numero"></span>
+            </div>
+            <img src="images/logo.png" alt="Matriz Logotipo" class="logo">
+            <h1>BOLSÃO 2026</h1>
+            <h2 class="subtitulo">{{unidade}}</h2>
+            <p class="intro">
+                Seja bem-vindo(a) ao Matriz Educação {{unidade}}! Nossa escola é a concretização da vivência de um
+                grupo de educadores muito experiente, que acredita que a única forma de mudar a realidade do nosso país é
+                através de uma política pedagógica baseada em valores, atrelada à alta performance. Acreditamos que, com
+                base em planejamento, estudo, determinação e confiança, qualquer sonho poderá ser alcançado.
+            </p>
+            <p class="center"><strong>JUNTOS construiremos o caminho até SEU SONHO!</strong></p>
+            <p class="center">
+                <span class="parabens"><strong>Parabéns, {{aluno}}!</strong></span><br>
+                <span class="bolsa">Você conquistou <strong>BOLSA de {{bolsa_pct}}%</strong>, com {{acertos_mat}} acertos em Matemática e {{acertos_port}} em Português,<br>
+                para a turma <strong>{{turma}}</strong>.</span>
+            </p>
+            <p class="planos"><strong>Veja os planos de pagamento para estudar conosco com essa bolsa:</strong></p>
+            <table class="pag1">
+                <tr>
+                    <th>Anuidade à Vista (-7%) até {{data_limite}}</th>
+                    <th>1ª Cota</th>
+                    <th>{{n_parcelas}}× Cotas (Jan a Dez)</th>
+                </tr>
+                <tr>
+                    <td>{{anuidade_vista}}</td>
+                    <td>{{primeira_cota}}</td>
+                    <td>{{valor_parcela}}</td>
+                </tr>
+            </table>
+            <p class="small"><strong> Documentos para matrícula</strong></p><br>
+            <p class="documentos">Responsável financeiro: RG, CPF e comprovante de residência;<br>
+                Aluno: RG, CPF, certidão de nascimento, atestado de fator RH, declaração escolar, histórico escolar e 2 fotos 3×4.
+            </p>
+            <p class="center2"><strong>Garanta sua vaga!</strong></p>
+            <p class="small2">
+                <span class="horario">Horário de funcionamento: 2ª a 6ª feira (7h às 19h) sábado (8h às 12h).</span>
+                <span class="data_limite">OBS: Essa bolsa é válida até o dia {{data_limite}}</span>
+                <div class="unidades-container">
+                    {{unidades_html}}
+                </div>
+            </p>
+        </div>
+    </div>
 
-    <div class="pagina">
-        <div class="container">
-            <img src="images/logo.png" alt="Matriz Logotipo" class="logo"><br>
-            <table class="pag2">
-                <tr><th colspan="3">Material Didático</th></tr>
-                <tr><td>1ª ao 5ª ano</td><td>R$ 2.842,08</td><td>11x de R$ 258,37</td></tr>
-                <tr><td>6ª ao 8ª ano</td><td>R$ 3.079,06</td><td>11x de R$ 279,91</td></tr>
-                <tr><td>9ª ano Vestibular</td><td>R$ 3.198,34</td><td>11x de R$ 290,76</td></tr>
-                <tr><td>1ª e 2ª série Vestibular</td><td>R$ 3.784,93</td><td>11x de R$ 344,08</td></tr>
-                <tr><td>3ª série</td><td>R$ 4.464,12</td><td>11x de R$ 405,83</td></tr>
-                <tr><td>Pré Vestibular</td><td>R$ 4.464,12</td><td>11x de R$ 405,83</td></tr>
-            </table><br>
-            <table class="pag2">
-                <tr><th colspan="3">Material Militares</th></tr>
-                <tr><td>CN/EPCAr</td><td>R$ 2.842,08</td><td>11x de R$ 258,37</td></tr>
-                <tr><td>1ª e 2ª EM Militar</td><td>R$ 2.597,97</td><td>11x de R$ 236,18</td></tr>
-                <tr><td>3ª Série - AFA/EN/EFOMM</td><td>R$ 2.842,08</td><td>11x de R$ 258,37</td></tr>
-                <tr><td>Curso - AFA/EN/EFOMM</td><td>R$ 2.597,97</td><td>11x de R$ 236,18</td></tr>
-                <tr><td>3ª série - EsPCEx</td><td>R$ 2.971,11</td><td>11x de R$ 270,10</td></tr>
-                <tr><td>Curso - EsPCEx</td><td>R$ 2.971,11</td><td>11x de R$ 270,10</td></tr>
-                <tr><td>3ª série - ESA</td><td>R$ 1.237,84</td><td>11x de R$ 112,53</td></tr>
-                <tr><td>Curso - ESA</td><td>R$ 1.237,84</td><td>11x de R$ 112,53</td></tr>
-            </table><br>
-            <p class="indica">Quem confia, indica!</p>
-            <img src="images/qr-code.png" alt="Qr Code" class="logo"><br><br><br><br>
-            <p class="small2">
-                <span class="horario">Horário de funcionamento: 2ª a 6ª feira (7h às 19h) sábado (8h às 12h).</span>
-                <span class="data_limite">OBS: Essa bolsa é válida até o dia {{data_limite}}</span>
-                <div class="unidades-container">
-                    {{unidades_html}}
-                </div>
-            </p>
-        </div>
-    </div>
+    <div class="pagina">
+        <div class="container">
+            <img src="images/logo.png" alt="Matriz Logotipo" class="logo"><br>
+            <table class="pag2">
+                <tr><th colspan="3">Material Didático</th></tr>
+                <tr><td>1ª ao 5ª ano</td><td>R$ 2.842,08</td><td>11x de R$ 258,37</td></tr>
+                <tr><td>6ª ao 8ª ano</td><td>R$ 3.079,06</td><td>11x de R$ 279,91</td></tr>
+                <tr><td>9ª ano Vestibular</td><td>R$ 3.198,34</td><td>11x de R$ 290,76</td></tr>
+                <tr><td>1ª e 2ª série Vestibular</td><td>R$ 3.784,93</td><td>11x de R$ 344,08</td></tr>
+                <tr><td>3ª série</td><td>R$ 4.464,12</td><td>11x de R$ 405,83</td></tr>
+                <tr><td>Pré Vestibular</td><td>R$ 4.464,12</td><td>11x de R$ 405,83</td></tr>
+            </table><br>
+            <table class="pag2">
+                <tr><th colspan="3">Material Militares</th></tr>
+                <tr><td>CN/EPCAr</td><td>R$ 2.842,08</td><td>11x de R$ 258,37</td></tr>
+                <tr><td>1ª e 2ª EM Militar</td><td>R$ 2.597,97</td><td>11x de R$ 236,18</td></tr>
+                <tr><td>3ª Série - AFA/EN/EFOMM</td><td>R$ 2.842,08</td><td>11x de R$ 258,37</td></tr>
+                <tr><td>Curso - AFA/EN/EFOMM</td><td>R$ 2.597,97</td><td>11x de R$ 236,18</td></tr>
+                <tr><td>3ª série - EsPCEx</td><td>R$ 2.971,11</td><td>11x de R$ 270,10</td></tr>
+                <tr><td>Curso - EsPCEx</td><td>R$ 2.971,11</td><td>11x de R$ 270,10</td></tr>
+                <tr><td>3ª série - ESA</td><td>R$ 1.237,84</td><td>11x de R$ 112,53</td></tr>
+                <tr><td>Curso - ESA</td><td>R$ 1.237,84</td><td>11x de R$ 112,53</td></tr>
+            </table><br>
+            <p class="indica">Quem confia, indica!</p>
+            <img src="images/qr-code.png" alt="Qr Code" class="logo"><br><br><br><br>
+            <p class="small2">
+                <span class="horario">Horário de funcionamento: 2ª a 6ª feira (7h às 19h) sábado (8h às 12h).</span>
+                <span class="data_limite">OBS: Essa bolsa é válida até o dia {{data_limite}}</span>
+                <div class="unidades-container">
+                    {{unidades_html}}
+                </div>
+            </p>
+        </div>
+    </div>
 
-    <div class="pagina">
-        <div class="container">
-            <img src="images/logo.png" alt="Matriz Logotipo" class="logo">
-            <h1>BOLSÃO 2026</h1>
-            <h2 class="subtitulo">{{unidade}}</h2>
-            <h2>INFORMAÇÕES ADICIONAIS</h2>
+    <div class="pagina">
+        <div class="container">
+            <img src="images/logo.png" alt="Matriz Logotipo" class="logo">
+            <h1>BOLSÃO 2026</h1>
+            <h2 class="subtitulo">{{unidade}}</h2>
+            <h2>INFORMAÇÕES ADICIONAIS</h2>
 
-            <div class="linha-formulario">
-                <span class="label-form">Nome do Responsável:</span>
-                <div class="campo">
-                    <span class="valor">&nbsp;</span>
-                    <div class="linha-fisica"></div>
-                </div>
-            </div>
-            <div class="linha-formulario">
-                <span class="label-form">Nome do Aluno:</span>
-                <div class="campo">
-                    <span class="valor">{{aluno}}</span>
-                    <div class="linha-fisica"></div>
-                </div>
-            </div>
-            <div class="linha-formulario">
-                <span class="label-form">Turma de Interesse:</span>
-                <div class="campo">
-                    <span class="valor">{{turma}}</span>
-                    <div class="linha-fisica"></div>
-                </div>
-            </div>
-            <div class="linha-formulario">
-                <span class="label-form">Código de Origem:</span>
-                <div class="campo">
-                    <span class="valor">&nbsp;</span>
-                    <div class="linha-fisica"></div>
-                </div>
-            </div>
-            <div class="linha-formulario">
-                <span class="label-form">Telefone:</span>
-                <div class="campo">
-                    <span class="valor">&nbsp;</span>
-                    <div class="linha-fisica"></div>
-                </div>
-            </div>
-            <div class="linha-formulario">
-                <span class="label-form">Nome do Atendente:</span>
-                <div class="campo">
-                    <span class="valor">&nbsp;</span>
-                    <div class="linha-fisica"></div>
-                </div>
-            </div>
+            <div class="linha-formulario">
+                <span class="label-form">Nome do Responsável:</span>
+                <div class="campo">
+                    <span class="valor">&nbsp;</span>
+                    <div class="linha-fisica"></div>
+                </div>
+            </div>
+            <div class="linha-formulario">
+                <span class="label-form">Nome do Aluno:</span>
+                <div class="campo">
+                    <span class="valor">{{aluno}}</span>
+                    <div class="linha-fisica"></div>
+                </div>
+            </div>
+            <div class="linha-formulario">
+                <span class="label-form">Turma de Interesse:</span>
+                <div class="campo">
+                    <span class="valor">{{turma}}</span>
+                    <div class="linha-fisica"></div>
+                </div>
+            </div>
+            <div class="linha-formulario">
+                <span class="label-form">Código de Origem:</span>
+                <div class="campo">
+                    <span class="valor">&nbsp;</span>
+                    <div class="linha-fisica"></div>
+                </div>
+            </div>
+            <div class="linha-formulario">
+                <span class="label-form">Telefone:</span>
+                <div class="campo">
+                    <span class="valor">&nbsp;</span>
+                    <div class="linha-fisica"></div>
+                </div>
+            </div>
+            <div class="linha-formulario">
+                <span class="label-form">Nome do Atendente:</span>
+                <div class="campo">
+                    <span class="valor">&nbsp;</span>
+                    <div class="linha-fisica"></div>
+                </div>
+            </div>
 
-            <div class="acertos-row">
-                <p class="acertos">Acertos em <br>Português: <strong>{{acertos_port}}</strong></p>
-                <p class="acertos">Acertos em <br>Matemática: <strong>{{acertos_mat}}</strong></p>
-            </div>
-            <p class="Percentual">Bolsão Percentual: <strong>{{bolsa_pct}}%</strong></p>
-            
-            <table class="pag3">
-                <tr>
-                    <th>1ª Cota</th>
-                    <th>11 Cotas (Fev - Dez)</th>
-                </tr>
-                <tr>
-                    <td>{{primeira_cota}}</td>
-                    <td>{{valor_parcela}}</td>
-                </tr>
-            </table>
-            <p class="classificacao"> Classificação: </p>
-            <table class="classificacao">
-                <tr><td>A</td><td>B</td><td>C</td></tr>
-            </table>
+            <div class="acertos-row">
+                <p class="acertos">Acertos em <br>Português: <strong>{{acertos_port}}</strong></p>
+                <p class="acertos">Acertos em <br>Matemática: <strong>{{acertos_mat}}</strong></p>
+            </div>
+            <p class="Percentual">Bolsão Percentual: <strong>{{bolsa_pct}}%</strong></p>
+            
+            <table class="pag3">
+                <tr>
+                    <th>1ª Cota</th>
+                    <th>11 Cotas (Fev - Dez)</th>
+                </tr>
+                <tr>
+                    <td>{{primeira_cota}}</td>
+                    <td>{{valor_parcela}}</td>
+                </tr>
+            </table>
+            <p class="classificacao"> Classificação: </p>
+            <table class="classificacao">
+                <tr><td>A</td><td>B</td><td>C</td></tr>
+            </table>
 
-            <div class="linha-formulario">
-                <span class="label-form">Proposta:</span>
-                <div class="campo">
-                    <span class="valor">&nbsp;</span>
-                    <div class="linha-fisica"></div>
-                </div>
-            </div>
-            <div class="linha-formulario">
-                <span class="label-form">Contraproposta:</span>
-                <div class="campo">
-                    <span class="valor">&nbsp;</span>
-                    <div class="linha-fisica"></div>
-                </div>
-            </div>
-            <div class="linha-formulario">
-                <span class="label-form">Observações Adicionais:</span>
-                <div class="campo">
-                    <span class="valor">&nbsp;</span>
-                    <div class="linha-fisica"></div>
-                </div>
-            </div>
-            <br><br><br>
-            
-            <p class="small2">
-                <span class="horario">Horário de funcionamento: 2ª a 6ª feira (7h às 19h) sábado (8h às 12h).</span><br>
-                <br><span class="data_limite">OBS: Essa bolsa é válida até o dia {{data_limite}}</span><br>
-                <div class="unidades-container">
-                    {{unidades_html}}
-                </div>
-            </p>
-        </div>
-    </div>
+            <div class="linha-formulario">
+                <span class="label-form">Proposta:</span>
+                <div class="campo">
+                    <span class="valor">&nbsp;</span>
+                    <div class="linha-fisica"></div>
+                </div>
+            </div>
+            <div class="linha-formulario">
+                <span class="label-form">Contraproposta:</span>
+                <div class="campo">
+                    <span class="valor">&nbsp;</span>
+                    <div class="linha-fisica"></div>
+                </div>
+            </div>
+            <div class="linha-formulario">
+                <span class="label-form">Observações Adicionais:</span>
+                <div class="campo">
+                    <span class="valor">&nbsp;</span>
+                    <div class="linha-fisica"></div>
+                </div>
+            </div>
+            <br><br><br>
+            
+            <p class="small2">
+                <span class="horario">Horário de funcionamento: 2ª a 6ª feira (7h às 19h) sábado (8h às 12h).</span><br>
+                <br><span class="data_limite">OBS: Essa bolsa é válida até o dia {{data_limite}}</span><br>
+                <div class="unidades-container">
+                    {{unidades_html}}
+                </div>
+            </p>
+        </div>
+    </div>
 </body>
 </html>
+
+
+
+
+
+
