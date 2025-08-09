@@ -56,16 +56,16 @@ UNIDADES_LIMPAS = sorted(list(UNIDADES_MAP.keys()))
 
 # Limites de desconto adaptados por unidade (usando o nome limpo como chave)
 DESCONTOS_MAXIMOS_POR_UNIDADE = {
-    "Retiro dos Artistas": 0.50,
-    "Campo Grande": 0.6320,
-    "Rocha Miranda": 0.6606,
-    "Taquara": 0.6755,
-    "Nova Iguaçu": 0.6700,
-    "Duque de Caxias": 0.6823,
-    "Bangu": 0.6806,
-    "Madureira": 0.7032,
-    "Tijuca": 0.6800,
-    "São João De Meriti": 0.7197,
+    "RETIRO DOS ARTISTAS": 0.50,
+    "CAMPO GRANDE": 0.6320,
+    "ROCHA MIRANDA": 0.6606,
+    "TAQUARA": 0.6755,
+    "NOVA IGUACU": 0.6700,
+    "DUQUE DE CAXIAS": 0.6823,
+    "BANGU": 0.6806,
+    "MADUREIRA": 0.7032,
+    "TIJUCA": 0.6800,
+    "SÃO JOÃO DE MERITI": 0.7197,
 }
 
 # --------------------------------------------------
@@ -395,3 +395,4 @@ with aba_ativacao:
             st.info("Nenhum candidato encontrado para a unidade selecionada.")
     else:
         st.warning("Não foi possível conectar ao Google Sheets para a ativação.")
+
