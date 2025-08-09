@@ -113,43 +113,14 @@ def get_all_hubspot_data(_client):
         st.error(f"❌ Falha ao carregar dados do Hubspot: {e}")
         return pd.DataFrame()
 
-def get_limites_data(client):
+def calcula_valor_minimo(unidade, serie_modalidade):
     """
-    Obtém dados da aba 'Limites' e retorna como dicionário.
-    Prioriza a planilha, mas usa os valores do código como fallback.
+    Calcula o valor mínimo negociável usando APENAS o dicionário local.
     """
-    try:
-        sheet = client.open_by_url("https://docs.google.com/spreadsheets/d/1qBV70qrPswnAUDxnHfBgKEU4FYAISpL7iVP0IM9zU2Q/edit#gid=422747648")
-        aba_limites = sheet.worksheet("Limites")
-        df_limites = pd.DataFrame(aba_limites.get_all_records())
-        limites_dict = {}
-        for _, row in df_limites.iterrows():
-            chave = (row['UNIDADE'], row['GRADE'])
-            if row['VALOR LIMITE']:
-                valor = float(str(row['VALOR LIMITE']).replace('R$', '').replace('.', '').replace(',', '.').strip())
-                limites_dict[chave] = valor
-        return limites_dict
-    except Exception as e:
-        st.warning(f"⚠️ Falha ao carregar dados de limites da planilha, usando valores padrão do código: {e}")
-        return {}
-
-def calcula_valor_minimo(unidade, serie_modalidade, limites_dict):
-    """
-    Calcula o valor mínimo negociável.
-    - Se encontrar na planilha, usa o valor de lá.
-    - Se não, usa o desconto máximo da unidade (agora em DESCONTOS_MAXIMOS_POR_UNIDADE).
-    """
-    # A chave na planilha usa o nome completo da unidade
-    chave = (UNIDADES_MAP.get(unidade, unidade), serie_modalidade)
-    if chave in limites_dict:
-        return limites_dict[chave]
-    else:
-        # Usa o nome "limpo" da unidade para buscar no dicionário de descontos
-        # O valor do desconto é um percentual, então para encontrar o valor mínimo
-        # é preciso fazer 1 - (desconto)
-        desconto_maximo = DESCONTOS_MAXIMOS_POR_UNIDADE.get(unidade, 0.60)
-        valor_integral = TUITION.get(serie_modalidade, {}).get("parcela13", 0)
-        return valor_integral * (1 - desconto_maximo)
+    # Usa o nome "limpo" da unidade para buscar no dicionário de descontos
+    desconto_maximo = DESCONTOS_MAXIMOS_POR_UNIDADE.get(unidade, 0.60)
+    valor_integral = TUITION.get(serie_modalidade, {}).get("parcela13", 0)
+    return valor_integral * (1 - desconto_maximo)
 
 
 def find_column_index(headers, target_name):
@@ -295,8 +266,8 @@ with aba_negociacao:
         with cn2:
             parcelas_n = st.radio("Parcelas", [12, 13], horizontal=True, key="n_parc")
 
-        limites = get_limites_data(client)
-        valor_minimo = calcula_valor_minimo(unidade_neg_limpa, serie_n, limites)
+        # Chama a função que agora usa apenas o dicionário interno
+        valor_minimo = calcula_valor_minimo(unidade_neg_limpa, serie_n)
         
         st.markdown(f"### ➡️ Valor Mínimo Negociável: *{format_currency(valor_minimo)}*")
         st.write("---")
