@@ -1,16 +1,19 @@
 # -*- coding: utf-8 -*-
 """
-Gerador_Carta_Bolsa.py (v7.2 - Versão com Correção de Erros)
+Gerador_Carta_Bolsa.py (v7.3 - Versão com Correção de Erro no Formulário)
 -------------------------------------------------
 Aplicação Streamlit que gera cartas, gerencia negociações e ativações de bolsão,
 utilizando WeasyPrint para PDF e Pandas para manipulação de dados.
 
 # Histórico de alterações
+# v7.3 - 20/08/2025:
+# - Corrigido erro "list index out of range" na aba "Formulário básico". A lógica
+#   de leitura de dados foi ajustada para calcular corretamente os índices relativos
+#   das colunas, tornando-a mais robusta.
 # v7.2 - 20/08/2025:
 # - Corrigido erro de "Session State API" na aba "Gerar Carta".
 # - Melhorada a mensagem de erro para colunas ausentes na aba "Ativação".
-# - Implementada gravação de dados robusta baseada no cabeçalho da planilha
-#   para evitar erros de ordem de coluna e garantir a presença do REGISTRO_ID.
+# - Implementada gravação de dados robusta baseada no cabeçalho da planilha.
 # v7.1 - 20/08/2025:
 # - Corrigidos os nomes das colunas na aba "Formulário básico".
 # v7.0 - 20/08/2025:
@@ -567,23 +570,33 @@ with aba_formulario:
                 if missing:
                     st.error(f"Faltam colunas em 'Resultados_Bolsao': {', '.join(missing)}")
                 else:
-                    id_col_letter = gspread.utils.rowcol_to_a1(1, hmap["REGISTRO_ID"])[0]
-                    aluno_col_letter = gspread.utils.rowcol_to_a1(1, hmap["Nome do Aluno"])[0]
-                    unidade_col_letter = gspread.utils.rowcol_to_a1(1, hmap["Unidade"])[0]
-                    
-                    range_str = f"{id_col_letter}2:{unidade_col_letter}5000"
+                    # CORREÇÃO: Lógica robusta para carregar dados para o dropdown
+                    cols_for_dropdown = ["REGISTRO_ID", "Nome do Aluno", "Unidade"]
+                    abs_indices = [hmap[c] for c in cols_for_dropdown]
+                    min_col_idx, max_col_idx = min(abs_indices), max(abs_indices)
+
+                    min_col_letter = gspread.utils.rowcol_to_a1(1, min_col_idx)[0]
+                    max_col_letter = gspread.utils.rowcol_to_a1(1, max_col_idx)[0]
+                    range_str = f"{min_col_letter}2:{max_col_letter}5000"
                     data = ws_res.get(range_str)
                     
                     options = {"Selecione um candidato...": None}
-                    id_idx = hmap["REGISTRO_ID"] - hmap["REGISTRO_ID"]
-                    aluno_idx = hmap["Nome do Aluno"] - hmap["REGISTRO_ID"]
-                    unidade_idx = hmap["Unidade"] - hmap["REGISTRO_ID"]
+
+                    # Calcula índices relativos ao range buscado
+                    id_idx_rel = hmap["REGISTRO_ID"] - min_col_idx
+                    aluno_idx_rel = hmap["Nome do Aluno"] - min_col_idx
+                    unidade_idx_rel = hmap["Unidade"] - min_col_idx
 
                     for row in data:
-                        if not row or not row[id_idx]: continue # Pula linhas vazias
-                        reg_id = row[id_idx]
-                        aluno = row[aluno_idx] if len(row) > aluno_idx else "N/A"
-                        unidade = row[unidade_idx] if len(row) > unidade_idx else "N/A"
+                        # Garante que a linha tem o tamanho mínimo e que o ID não está vazio
+                        max_req_idx = max(id_idx_rel, aluno_idx_rel, unidade_idx_rel)
+                        if len(row) <= max_req_idx or not row[id_idx_rel]:
+                            continue
+
+                        reg_id = row[id_idx_rel]
+                        aluno = row[aluno_idx_rel]
+                        unidade = row[unidade_idx_rel]
+                        
                         label = f"{aluno} - {unidade} ({reg_id})"
                         options[label] = reg_id
 
