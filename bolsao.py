@@ -1,15 +1,17 @@
 # -*- coding: utf-8 -*-
 """
-Gerador_Carta_Bolsa.py (v7.4 - Versão com Filtro por Filial no Formulário)
+Gerador_Carta_Bolsa.py (v7.5 - Versão com Correção no Filtro de Alunos)
 -------------------------------------------------
 Aplicação Streamlit que gera cartas, gerencia negociações e ativações de bolsão,
 utilizando WeasyPrint para PDF e Pandas para manipulação de dados.
 
 # Histórico de alterações
+# v7.5 - 20/08/2025:
+# - Corrigido o problema na aba "Formulário básico" onde a lista de alunos não
+#   era populada após selecionar a filial. A lógica de busca e filtro de dados
+#   foi otimizada para garantir o carregamento correto.
 # v7.4 - 20/08/2025:
-# - Adicionado filtro obrigatório por unidade na aba "Formulário básico" antes
-#   de carregar a lista de candidatos, resolvendo o problema de não carregar
-#   nenhum aluno e melhorando a usabilidade.
+# - Adicionado filtro obrigatório por unidade na aba "Formulário básico".
 # v7.3 - 20/08/2025:
 # - Corrigido erro "list index out of range" na aba "Formulário básico".
 # v7.2 - 20/08/2025:
@@ -584,35 +586,21 @@ with aba_formulario:
                     # Só carrega os candidatos DEPOIS de selecionar uma unidade
                     if unidade_selecionada_filtro != "Selecione...":
                         
-                        cols_for_dropdown = ["REGISTRO_ID", "Nome do Aluno", "Unidade"]
-                        abs_indices = [hmap[c] for c in cols_for_dropdown]
-                        min_col_idx, max_col_idx = min(abs_indices), max(abs_indices)
+                        # CORREÇÃO: Usar get_all_records para simplificar a leitura e o filtro
+                        @st.cache_data(ttl=60)
+                        def get_form_data():
+                            return ws_res.get_all_records()
 
-                        min_col_letter = gspread.utils.rowcol_to_a1(1, min_col_idx)[0]
-                        max_col_letter = gspread.utils.rowcol_to_a1(1, max_col_idx)[0]
-                        range_str = f"{min_col_letter}2:{max_col_letter}5000"
-                        
-                        all_data = ws_res.get(range_str)
-                        
-                        id_idx_rel = hmap["REGISTRO_ID"] - min_col_idx
-                        aluno_idx_rel = hmap["Nome do Aluno"] - min_col_idx
-                        unidade_idx_rel = hmap["Unidade"] - min_col_idx
-
+                        all_data = get_form_data()
                         unidade_completa_filtro = UNIDADES_MAP[unidade_selecionada_filtro]
 
                         for row in all_data:
-                            max_req_idx = max(id_idx_rel, aluno_idx_rel, unidade_idx_rel)
-                            if len(row) <= max_req_idx or not row[id_idx_rel]:
-                                continue
-                            
-                            # Aplica o filtro de unidade
-                            if row[unidade_idx_rel] == unidade_completa_filtro:
-                                reg_id = row[id_idx_rel]
-                                aluno = row[aluno_idx_rel]
-                                
-                                # Para o label, usamos o nome e o ID para garantir unicidade
-                                label = f"{aluno} ({reg_id})"
-                                options[label] = reg_id
+                            if row.get("Unidade") == unidade_completa_filtro:
+                                reg_id = row.get("REGISTRO_ID")
+                                aluno = row.get("Nome do Aluno")
+                                if reg_id and aluno:
+                                    label = f"{aluno} ({reg_id})"
+                                    options[label] = reg_id
 
                     selecao = st.selectbox("Selecione o Registro do Bolsão", options.keys())
 
