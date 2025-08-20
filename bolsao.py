@@ -1,11 +1,14 @@
 # -*- coding: utf-8 -*-
 """
-Gerador_Carta_Bolsa.py (v7.5 - Versão com Correção no Filtro de Alunos)
+Gerador_Carta_Bolsa.py (v7.6 - Remoção de Campos do Formulário)
 -------------------------------------------------
 Aplicação Streamlit que gera cartas, gerencia negociações e ativações de bolsão,
 utilizando WeasyPrint para PDF e Pandas para manipulação de dados.
 
 # Histórico de alterações
+# v7.6 - 20/08/2025:
+# - Removidos os campos "Responsável Financeiro" e "CPF Responsável" da
+#   aba "Formulário básico", conforme solicitado.
 # v7.5 - 20/08/2025:
 # - Corrigido o problema na aba "Formulário básico" onde a lista de alunos não
 #   era populada após selecionar a filial. A lógica de busca e filtro de dados
@@ -551,7 +554,7 @@ with aba_ativacao:
         else:
             st.info("Clique em 'Carregar Lista de Candidatos' para começar.")
     else:
-        st.warning("Não foi possível conectar ao Google Sheets para a ativação.")
+        st.warning("Não foi possível conectar ao Google Sheets para a negociação.")
 
 # --- ABA FORMULÁRIO BÁSICO ---
 with aba_formulario:
@@ -565,16 +568,15 @@ with aba_formulario:
             if ws_res:
                 hmap = header_map("Resultados_Bolsao")
 
+                # REMOVIDOS: "Responsável Financeiro", "CPF Responsável"
                 cols_list = ["REGISTRO_ID", "Nome do Aluno", "Unidade", "% Bolsa", "Valor da Mensalidade com Bolsa",
-                             "Responsável Financeiro", "CPF Responsável", "Escola de Origem",
-                             "Valor Negociado", "Aluno Matriculou?", "Optou por PIA?",
+                             "Escola de Origem", "Valor Negociado", "Aluno Matriculou?", "Optou por PIA?",
                              "Valor Limite (PIA)", "Observações (Form)", "Data/Hora"]
                 
                 missing = [c for c in cols_list if c not in hmap]
                 if missing:
                     st.error(f"Faltam colunas em 'Resultados_Bolsao': {', '.join(missing)}")
                 else:
-                    # --- NOVO: Filtro por Unidade ---
                     unidade_selecionada_filtro = st.selectbox(
                         "Primeiro, filtre por uma unidade",
                         ["Selecione..."] + UNIDADES_LIMPAS,
@@ -583,10 +585,8 @@ with aba_formulario:
 
                     options = {"Selecione um candidato...": None}
 
-                    # Só carrega os candidatos DEPOIS de selecionar uma unidade
                     if unidade_selecionada_filtro != "Selecione...":
                         
-                        # CORREÇÃO: Usar get_all_records para simplificar a leitura e o filtro
                         @st.cache_data(ttl=60)
                         def get_form_data():
                             return ws_res.get_all_records()
@@ -617,9 +617,8 @@ with aba_formulario:
 
                             st.info(f"**Aluno:** {get_col_val('Nome do Aluno')} | **Bolsa:** {get_col_val('% Bolsa')} | **Parcela:** {get_col_val('Valor da Mensalidade com Bolsa')}")
                             st.write("---")
-
-                            resp_fin = st.text_input("Responsável Financeiro", get_col_val("Responsável Financeiro"))
-                            cpf_resp = st.text_input("CPF Responsável", get_col_val("CPF Responsável"))
+                            
+                            # REMOVIDOS: Inputs para Responsável e CPF
                             escola_origem = st.text_input("Escola de Origem", get_col_val("Escola de Origem"))
                             valor_negociado = st.text_input("Valor Negociado", get_col_val("Valor Negociado"))
                             
@@ -633,9 +632,8 @@ with aba_formulario:
                             obs_form = st.text_area("Observações (Form)", get_col_val("Observações (Form)"))
 
                             if st.button("Salvar Formulário"):
+                                # REMOVIDOS: "Responsável Financeiro", "CPF Responsável" do dict
                                 updates_dict = {
-                                    "Responsável Financeiro": resp_fin,
-                                    "CPF Responsável": cpf_resp,
                                     "Escola de Origem": escola_origem,
                                     "Valor Negociado": valor_negociado,
                                     "Aluno Matriculou?": aluno_matriculou,
