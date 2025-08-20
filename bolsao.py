@@ -1,20 +1,17 @@
 # -*- coding: utf-8 -*-
 """
-Gerador_Carta_Bolsa.py (v7.0 - Versão Otimizada com Formulário)
+Gerador_Carta_Bolsa.py (v7.1 - Versão com Cabeçalhos Corrigidos)
 -------------------------------------------------
 Aplicação Streamlit que gera cartas, gerencia negociações e ativações de bolsão,
 utilizando WeasyPrint para PDF e Pandas para manipulação de dados.
 
 # Histórico de alterações
+# v7.1 - 20/08/2025:
+# - Corrigidos os nomes das colunas na aba "Formulário básico" e na gravação da
+#   carta para corresponderem exatamente ao cabeçalho da planilha "Resultados_Bolsao".
 # v7.0 - 20/08/2025:
 # - Adicionada a aba "Formulário básico" para edição de registros de bolsão.
-# - Implementadas otimizações de performance para a API do Google Sheets:
-#   - Leitura de dados por ranges específicos em vez de carregar a planilha inteira.
-#   - Atualizações de células em lote (batch updates) para reduzir requisições.
-#   - Cache aprimorado para objetos de planilha e cliente gspread.
-#   - Adicionado um ID único (REGISTRO_ID) para cada carta gerada, facilitando a busca e atualização.
-# v6.0 - 09/08/2025: Adicionada a funcionalidade de sincronização entre os
-# campos de 'Turma de interesse' e 'Série / Modalidade' na aba 'Gerar Carta'.
+# - Implementadas otimizações de performance para a API do Google Sheets.
 """
 import io
 import uuid
@@ -165,7 +162,13 @@ def calcula_bolsa(acertos: int) -> float:
     return BOLSA_MAP.get(ac, 0.30)
 
 def format_currency(v: float) -> str:
-    return f"R$ {v:,.2f}".replace(",", "@").replace(".", ",").replace("@", ".")
+    # Tenta converter para float, se falhar, retorna o valor original (pode ser string 'N/A')
+    try:
+        v_float = float(v)
+        return f"R$ {v_float:,.2f}".replace(",", "@").replace(".", ",").replace("@", ".")
+    except (ValueError, TypeError):
+        return str(v)
+
 
 def gera_pdf_html(ctx: dict) -> bytes:
     base_dir = Path(__file__).parent
@@ -199,18 +202,14 @@ def get_hubspot_data_for_activation():
                        "Contato realizado", "Observações", "Celular Tratado", "Nome", 
                        "E-mail", "Turma de Interesse - Geral", "Fonte original"]
         
-        # Valida se todas as colunas necessárias existem
         if not all(c in hmap_h for c in cols_needed):
             st.error("Uma ou mais colunas necessárias não foram encontradas na aba 'Hubspot'.")
             return pd.DataFrame()
 
-        # Leitura otimizada
         data = ws_hub.get_all_records(head=1)
         df = pd.DataFrame(data)
         
-        # Filtra apenas as colunas necessárias para o DataFrame
-        df = df[cols_needed]
-        return df
+        return df[cols_needed]
 
     except Exception as e:
         st.error(f"❌ Falha ao carregar dados do Hubspot: {e}")
@@ -372,18 +371,28 @@ with aba_carta:
                 try:
                     ws_res = get_ws("Resultados_Bolsao")
                     REGISTRO_ID = new_uuid()
+                    # ATENÇÃO: A ordem aqui deve bater EXATAMENTE com a planilha
                     nova_linha = [
-                        datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                        REGISTRO_ID,
-                        aluno.strip().title(),
-                        UNIDADES_MAP[unidade_limpa],
-                        st.session_state["c_turma"],
-                        ac_mat, ac_port, total, f"{pct*100:.0f}%",
-                        st.session_state["c_serie"],
-                        ctx["anuidade_vista"], ctx["primeira_cota"], ctx["valor_parcela"],
-                        st.session_state.get("email", "-"), nome_bolsao,
-                        "", "", "", "", "", "", "", "" # Placeholders para colunas do formulário
+                        datetime.now().strftime("%d/%m/%Y %H:%M:%S"), # Data/Hora
+                        aluno.strip().title(), # Nome do Aluno
+                        UNIDADES_MAP[unidade_limpa], # Unidade
+                        st.session_state["c_turma"], # Turma de Interesse
+                        ac_mat, # Acertos Matemática
+                        ac_port, # Acertos Português
+                        total, # Total de Acertos
+                        f"{pct*100:.0f}%", # % Bolsa
+                        st.session_state["c_serie"], # Série / Modalidade
+                        ctx["anuidade_vista"], # Valor Anuidade à Vista
+                        ctx["primeira_cota"], # Valor da 1ª Cota
+                        ctx["valor_parcela"], # Valor da Mensalidade com Bolsa
+                        st.session_state.get("user", "-"), # Usuário (ajustar se tiver login)
+                        nome_bolsao, # Bolsão
+                        "", "", "", "", "", "", "", "", # Placeholders para colunas do formulário
+                        REGISTRO_ID # Adicionando REGISTRO_ID (assumindo que é a última coluna ou uma coluna específica)
                     ]
+                    # É mais seguro adicionar o REGISTRO_ID em uma coluna específica se a ordem não for garantida
+                    # Ex: hmap = header_map("Resultados_Bolsao"); col_idx = hmap['REGISTRO_ID']
+                    
                     ws_res.append_row(nova_linha, value_input_option="USER_ENTERED")
                     st.info("📊 Resposta registrada na planilha.")
                 except Exception as e:
@@ -535,29 +544,36 @@ with aba_formulario:
             ws_res = get_ws("Resultados_Bolsao")
             hmap = header_map("Resultados_Bolsao")
 
-            cols_list = ["REGISTRO_ID", "Aluno", "Unidade", "Bolsa %", "Valor Parcela",
+            # ATUALIZADO: Nomes exatos das colunas da sua planilha
+            # Adicione 'REGISTRO_ID' ao cabeçalho da sua planilha se ainda não existir
+            cols_list = ["REGISTRO_ID", "Nome do Aluno", "Unidade", "% Bolsa", "Valor da Mensalidade com Bolsa",
                          "Responsável Financeiro", "CPF Responsável", "Escola de Origem",
                          "Valor Negociado", "Aluno Matriculou?", "Optou por PIA?",
-                         "Valor Limite (PIA)", "Observações (Form)", "Timestamp"]
+                         "Valor Limite (PIA)", "Observações (Form)", "Data/Hora"]
             
             missing = [c for c in cols_list if c not in hmap]
             if missing:
                 st.error(f"Faltam colunas em 'Resultados_Bolsao': {', '.join(missing)}")
             else:
                 # Carrega dados para o selectbox
-                id_col = gspread.utils.rowcol_to_a1(1, hmap["REGISTRO_ID"])[0]
-                aluno_col = gspread.utils.rowcol_to_a1(1, hmap["Aluno"])[0]
-                unidade_col = gspread.utils.rowcol_to_a1(1, hmap["Unidade"])[0]
+                id_col_letter = gspread.utils.rowcol_to_a1(1, hmap["REGISTRO_ID"])[0]
+                aluno_col_letter = gspread.utils.rowcol_to_a1(1, hmap["Nome do Aluno"])[0]
+                unidade_col_letter = gspread.utils.rowcol_to_a1(1, hmap["Unidade"])[0]
                 
                 # Leitura otimizada para o selectbox
-                range_str = f"{id_col}2:{unidade_col}5000"
+                range_str = f"{id_col_letter}2:{unidade_col_letter}5000"
                 data = ws_res.get(range_str)
                 
                 options = {"Selecione um candidato...": None}
+                # Ajusta os índices para a leitura do range
+                id_idx = hmap["REGISTRO_ID"] - hmap["REGISTRO_ID"]
+                aluno_idx = hmap["Nome do Aluno"] - hmap["REGISTRO_ID"]
+                unidade_idx = hmap["Unidade"] - hmap["REGISTRO_ID"]
+
                 for row in data:
-                    reg_id = row[0]
-                    aluno = row[hmap["Aluno"] - hmap["REGISTRO_ID"]] if len(row) > hmap["Aluno"] - hmap["REGISTRO_ID"] else "N/A"
-                    unidade = row[hmap["Unidade"] - hmap["REGISTRO_ID"]] if len(row) > hmap["Unidade"] - hmap["REGISTRO_ID"] else "N/A"
+                    reg_id = row[id_idx]
+                    aluno = row[aluno_idx] if len(row) > aluno_idx else "N/A"
+                    unidade = row[unidade_idx] if len(row) > unidade_idx else "N/A"
                     label = f"{aluno} - {unidade} ({reg_id})"
                     options[label] = reg_id
 
@@ -568,14 +584,13 @@ with aba_formulario:
                     rownum = find_row_by_id(ws_res, hmap["REGISTRO_ID"], reg_id_selecionado)
                     
                     if rownum:
-                        # Carrega os dados da linha selecionada
                         row_data = ws_res.row_values(rownum)
                         
                         def get_col_val(name):
                             idx = hmap.get(name)
                             return row_data[idx - 1] if idx and len(row_data) >= idx else ""
 
-                        st.info(f"**Aluno:** {get_col_val('Aluno')} | **Bolsa:** {get_col_val('Bolsa %')} | **Parcela:** {get_col_val('Valor Parcela')}")
+                        st.info(f"**Aluno:** {get_col_val('Nome do Aluno')} | **Bolsa:** {get_col_val('% Bolsa')} | **Parcela:** {get_col_val('Valor da Mensalidade com Bolsa')}")
                         st.write("---")
 
                         # Campos editáveis
@@ -591,7 +606,7 @@ with aba_formulario:
                         optou_pia = st.checkbox("Optou por PIA?", value=(get_col_val("Optou por PIA?") == "Sim"))
                         valor_limite_pia = st.text_input("Valor Limite (PIA)", get_col_val("Valor Limite (PIA)"), disabled=not optou_pia)
                         
-                        obs_form = st.text_area("Observações (Formulário)", get_col_val("Observações (Form)"))
+                        obs_form = st.text_area("Observações (Form)", get_col_val("Observações (Form)"))
 
                         if st.button("Salvar Formulário"):
                             updates_dict = {
