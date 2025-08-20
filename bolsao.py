@@ -1,15 +1,18 @@
 # -*- coding: utf-8 -*-
 """
-Gerador_Carta_Bolsa.py (v7.8 - Mapeamento de Turmas)
+Gerador_Carta_Bolsa.py (v7.9 - Correção de Nomenclatura de Coluna)
 -------------------------------------------------
 Aplicação Streamlit que gera cartas, gerencia negociações e ativações de bolsão,
 utilizando WeasyPrint para PDF e Pandas para manipulação de dados.
 
 # Histórico de alterações
+# v7.9 - 20/08/2025:
+# - Corrigido o nome da coluna "Contato realizado" para "Contato Realizado" na
+#   função de busca de dados do Hubspot, resolvendo o erro de coluna não
+#   encontrada devido à diferença de maiúsculas/minúsculas.
 # v7.8 - 20/08/2025:
 # - Implementado o mapeamento "de-para" entre "Turma de interesse" e "Série /
-#   Modalidade" na aba "Gerar Carta". O campo de série agora é preenchido
-#   automaticamente com base na seleção da turma.
+#   Modalidade" na aba "Gerar Carta".
 # v7.7 - 20/08/2025:
 # - Adicionado um segundo filtro para "Bolsão" na aba "Formulário básico".
 # v7.6 - 20/08/2025:
@@ -254,8 +257,9 @@ def get_hubspot_data_for_activation():
             return pd.DataFrame()
 
         hmap_h = header_map("Hubspot")
+        # CORREÇÃO: Ajustado "Contato realizado" para "Contato Realizado"
         cols_needed = ["Unidade", "Nome do candidato", "Contato ID", "Status do Contato", 
-                       "Contato realizado", "Observações", "Celular Tratado", "Nome", 
+                       "Contato Realizado", "Observações", "Celular Tratado", "Nome", 
                        "E-mail", "Turma de Interesse - Geral", "Fonte original"]
         
         missing_cols = [c for c in cols_needed if c not in hmap_h]
@@ -266,7 +270,11 @@ def get_hubspot_data_for_activation():
         data = ws_hub.get_all_records(head=1)
         df = pd.DataFrame(data)
         
-        return df[cols_needed]
+        # Renomeia a coluna para o código usar um nome padronizado
+        if "Contato Realizado" in df.columns:
+            df.rename(columns={"Contato Realizado": "Contato realizado"}, inplace=True)
+
+        return df
 
     except Exception as e:
         st.error(f"❌ Falha ao carregar dados do Hubspot: {e}")
@@ -573,8 +581,8 @@ with aba_ativacao:
                                         updates = []
                                         if 'Nome do candidato' in hmap:
                                             updates.append({"range": gspread.utils.rowcol_to_a1(rownum, hmap['Nome do candidato']), "values": [[novo_nome]]})
-                                        if 'Contato realizado' in hmap:
-                                            updates.append({"range": gspread.utils.rowcol_to_a1(rownum, hmap['Contato realizado']), "values": [["Sim" if contato_realizado else "Não"]]})
+                                        if 'Contato Realizado' in hmap: # Usa o nome correto da coluna
+                                            updates.append({"range": gspread.utils.rowcol_to_a1(rownum, hmap['Contato Realizado']), "values": [["Sim" if contato_realizado else "Não"]]})
                                         if 'Status do Contato' in hmap:
                                             updates.append({"range": gspread.utils.rowcol_to_a1(rownum, hmap['Status do Contato']), "values": [[status_contato]]})
                                         if 'Observações' in hmap:
