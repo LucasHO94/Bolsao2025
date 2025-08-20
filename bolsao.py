@@ -1,15 +1,19 @@
 # -*- coding: utf-8 -*-
 """
-Gerador_Carta_Bolsa.py (v7.9 - Correção de Nomenclatura de Coluna)
+Gerador_Carta_Bolsa.py (v8.0 - Correção de Grid Limits)
 -------------------------------------------------
 Aplicação Streamlit que gera cartas, gerencia negociações e ativações de bolsão,
 utilizando WeasyPrint para PDF e Pandas para manipulação de dados.
 
 # Histórico de alterações
+# v8.0 - 20/08/2025:
+# - Corrigido o erro "exceeds grid limits" ao atualizar a função batch_update_cells
+#   para prefixar o nome da aba em ranges A1.
+# - Adicionada a função ensure_size para garantir um tamanho mínimo para a planilha
+#   de resultados, prevenindo erros de escrita.
 # v7.9 - 20/08/2025:
 # - Corrigido o nome da coluna "Contato realizado" para "Contato Realizado" na
-#   função de busca de dados do Hubspot, resolvendo o erro de coluna não
-#   encontrada devido à diferença de maiúsculas/minúsculas.
+#   função de busca de dados do Hubspot.
 # v7.8 - 20/08/2025:
 # - Implementado o mapeamento "de-para" entre "Turma de interesse" e "Série /
 #   Modalidade" na aba "Gerar Carta".
@@ -109,10 +113,35 @@ def find_row_by_id(ws, id_col_idx: int, target_id: str):
 def batch_update_cells(ws, updates):
     """
     Executa múltiplas atualizações de células em uma única requisição.
-    updates: lista de dicts [{"range": "A2", "values": [[...]]}, ...]
+    Aceita 'range' em A1 simples (ex.: 'Q446') ou completo (ex.: 'Resultados_Bolsao!Q446').
+    Prefixa o nome da aba quando necessário para evitar cair na aba errada (ex.: 'Limites').
     """
-    body = {"valueInputOption": "USER_ENTERED", "data": updates}
+    if not updates:
+        return
+
+    fixed = []
+    # Escapa apóstrofos no título da aba para A1 notation: O'Brien -> O''Brien
+    sheet_title_safe = ws.title.replace("'", "''")
+
+    for u in updates:
+        rng = u.get("range", "")
+        if not rng:
+            continue
+        if "!" not in rng:  # range sem nome de aba
+            rng = f"'{sheet_title_safe}'!{rng}"
+        fixed.append({"range": rng, "values": u.get("values", [[]])})
+
+    body = {"valueInputOption": "USER_ENTERED", "data": fixed}
     ws.spreadsheet.values_batch_update(body)
+
+def ensure_size(ws, min_rows=2000, min_cols=40):
+    """Garante que a planilha tenha um tamanho mínimo para evitar erros de 'exceeds grid limits'."""
+    try:
+        if ws and (ws.row_count < min_rows or ws.col_count < min_cols):
+            ws.resize(rows=max(ws.row_count, min_rows), cols=max(ws.col_count, min_cols))
+    except Exception:
+        # Falha silenciosamente, pois é uma otimização e não deve quebrar a aplicação.
+        pass
 
 def new_uuid():
     """Gera um ID único e curto."""
@@ -402,6 +431,7 @@ with aba_carta:
             st.error("Não foi possível gerar a carta pois a conexão com a planilha falhou.")
         else:
             ws_res = get_ws("Resultados_Bolsao")
+            ensure_size(ws_res, 2000, 40)
             hmap_res = header_map("Resultados_Bolsao")
 
             if not ws_res or not hmap_res:
@@ -612,6 +642,7 @@ with aba_formulario:
     else:
         try:
             ws_res = get_ws("Resultados_Bolsao")
+            ensure_size(ws_res, 2000, 40)
             if ws_res:
                 hmap = header_map("Resultados_Bolsao")
 
