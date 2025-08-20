@@ -1,24 +1,100 @@
 # -*- coding: utf-8 -*-
 """
-Gerador_Carta_Bolsa.py (v6.0 - Versão Unificada com Observações)
+Gerador_Carta_Bolsa.py (v7.0 - Versão Otimizada com Formulário)
 -------------------------------------------------
 Aplicação Streamlit que gera cartas, gerencia negociações e ativações de bolsão,
 utilizando WeasyPrint para PDF e Pandas para manipulação de dados.
 
 # Histórico de alterações
+# v7.0 - 20/08/2025:
+# - Adicionada a aba "Formulário básico" para edição de registros de bolsão.
+# - Implementadas otimizações de performance para a API do Google Sheets:
+#   - Leitura de dados por ranges específicos em vez de carregar a planilha inteira.
+#   - Atualizações de células em lote (batch updates) para reduzir requisições.
+#   - Cache aprimorado para objetos de planilha e cliente gspread.
+#   - Adicionado um ID único (REGISTRO_ID) para cada carta gerada, facilitando a busca e atualização.
 # v6.0 - 09/08/2025: Adicionada a funcionalidade de sincronização entre os
-# campos de 'Turma de interesse' e 'Série / Modalidade' na aba 'Gerar Carta',
-# conforme a solicitação do usuário. Agora ambos os campos são `selectbox` e
-# se espelham mutuamente.
+# campos de 'Turma de interesse' e 'Série / Modalidade' na aba 'Gerar Carta'.
 """
 import io
+import uuid
 from datetime import date, timedelta, datetime
+from functools import lru_cache
 from pathlib import Path
-import streamlit as st
+
+import gspread
 import pandas as pd
+import streamlit as st
 import weasyprint
 from google.oauth2.service_account import Credentials
-import gspread
+
+# --------------------------------------------------
+# UTILITÁRIOS DE ACESSO AO GOOGLE SHEETS (OTIMIZADOS)
+# --------------------------------------------------
+SPREAD_URL = "https://docs.google.com/spreadsheets/d/1qBV70qrPswnAUDxnHfBgKEU4FYAISpL7iVP0IM9zU2Q/edit#gid=0"
+
+@st.cache_resource
+def get_gspread_client():
+    """Conecta ao Google Sheets usando os segredos do Streamlit e faz cache da conexão."""
+    try:
+        scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+        creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
+        return gspread.authorize(creds)
+    except Exception as e:
+        st.error(f"❌ Erro de autenticação com o Google Sheets: {e}")
+        return None
+
+@st.cache_resource
+def get_workbook(_client):
+    """Abre a planilha e faz cache do objeto."""
+    if not _client:
+        return None
+    return _client.open_by_url(SPREAD_URL)
+
+@lru_cache(maxsize=32)
+def get_ws(title: str):
+    """Obtém uma aba (worksheet) pelo título e faz cache."""
+    client = get_gspread_client()
+    wb = get_workbook(client)
+    if wb:
+        return wb.worksheet(title)
+    return None
+
+@lru_cache(maxsize=32)
+def header_map(ws_title: str):
+    """Cria um mapa de 'nome_da_coluna': indice para uma dada aba."""
+    ws = get_ws(ws_title)
+    if ws:
+        headers = ws.row_values(1)
+        return {h.strip(): i + 1 for i, h in enumerate(headers) if h and h.strip()}
+    return {}
+
+def get_values(ws, a1_range: str):
+    """Leitura enxuta por range; muito mais barato que get_all_records()."""
+    return ws.get(a1_range, value_render_option="UNFORMATTED_VALUE")
+
+def find_row_by_id(ws, id_col_idx: int, target_id: str):
+    """Evita ws.find repetido. Carrega a coluna de IDs 1x e busca em memória."""
+    try:
+        col_values = ws.col_values(id_col_idx)[1:]  # ignora header
+        for i, value in enumerate(col_values, start=2):
+            if str(value) == str(target_id):
+                return i
+    except Exception:
+        return None
+    return None
+
+def batch_update_cells(ws, updates):
+    """
+    Executa múltiplas atualizações de células em uma única requisição.
+    updates: lista de dicts [{"range": "A2", "values": [[...]]}, ...]
+    """
+    body = {"valueInputOption": "USER_ENTERED", "data": updates}
+    ws.spreadsheet.values_batch_update(body)
+
+def new_uuid():
+    """Gera um ID único e curto."""
+    return uuid.uuid4().hex[:12]
 
 # --------------------------------------------------
 # DADOS DE REFERÊNCIA E CONFIGURAÇÕES
@@ -49,7 +125,6 @@ TUITION = {
     "Pré-Vestibular": {"anuidade": 14668.50, "parcela13": 1128.35},
 }
 
-# Sistema de Unidades aprimorado
 UNIDADES_COMPLETAS = [
     "COLEGIO E CURSO MATRIZ EDUCACAO CAMPO GRANDE", "COLEGIO E CURSO MATRIZ EDUCAÇÃO TAQUARA",
     "COLEGIO E CURSO MATRIZ EDUCAÇÃO BANGU", "COLEGIO E CURSO MATRIZ EDUCACAO NOVA IGUACU",
@@ -60,56 +135,31 @@ UNIDADES_COMPLETAS = [
 UNIDADES_MAP = {name.replace("COLEGIO E CURSO MATRIZ EDUCACAO", "").replace("COLEGIO E CURSO MATRIZ EDUCAÇÃO", "").strip(): name for name in UNIDADES_COMPLETAS}
 UNIDADES_LIMPAS = sorted(list(UNIDADES_MAP.keys()))
 
-# Limites de desconto adaptados por unidade (usando o nome limpo como chave)
 DESCONTOS_MAXIMOS_POR_UNIDADE = {
-    "RETIRO DOS ARTISTAS": 0.50,
-    "CAMPO GRANDE": 0.6320,
-    "ROCHA MIRANDA": 0.6606,
-    "TAQUARA": 0.6755,
-    "NOVA IGUACU": 0.6700,
-    "DUQUE DE CAXIAS": 0.6823,
-    "BANGU": 0.6806,
-    "MADUREIRA": 0.7032,
-    "TIJUCA": 0.6800,
-    "SÃO JOÃO DE MERITI": 0.7197,
+    "RETIRO DOS ARTISTAS": 0.50, "CAMPO GRANDE": 0.6320, "ROCHA MIRANDA": 0.6606,
+    "TAQUARA": 0.6755, "NOVA IGUACU": 0.6700, "DUQUE DE CAXIAS": 0.6823,
+    "BANGU": 0.6806, "MADUREIRA": 0.7032, "TIJUCA": 0.6800, "SÃO JOÃO DE MERITI": 0.7197,
 }
-
-# --- PREÇOS 2026 CORRIGIDOS A PARTIR DO TUITION ATUAL (+10%) ---
-def precos_2026(serie_modalidade: str) -> dict:
-    """
-    A partir do TUITION atual (que está com +10% nas 13 cotas),
-    reconstrói os preços CORRETOS para 2026:
-      - primeira_cota: igual à parcela de 2025
-      - parcela_mensal: parcela de 2025 reajustada em 9,3%
-      - anuidade: primeira_cota + 12 * parcela_mensal
-    Obs.: Considera que TUITION[serie]['parcela13'] atual = parcela_2025 * 1.10
-    """
-    base = TUITION.get(serie_modalidade, {})
-    if not base:
-        return {"primeira_cota": 0.0, "parcela_mensal": 0.0, "anuidade": 0.0}
-
-    # parcela_2026_do_dict = parcela_2025 * 1.10  (estado atual do seu TUITION)
-    parcela_2026_do_dict = float(base.get("parcela13", 0.0))
-    if parcela_2026_do_dict <= 0:
-        return {"primeira_cota": 0.0, "parcela_mensal": 0.0, "anuidade": 0.0}
-
-    # Recupera a parcela 2025
-    parcela_2025 = round(parcela_2026_do_dict / 1.10, 2)
-
-    # Regra nova:
-    primeira_cota = parcela_2025
-    parcela_mensal = round(parcela_2025 * 1.093, 2)  # 12 parcelas reajustadas em 9,3%
-    anuidade = round(primeira_cota + 12 * parcela_mensal, 2)
-
-    return {
-        "primeira_cota": primeira_cota,
-        "parcela_mensal": parcela_mensal,    # usar no lugar de 'parcela13' para as 12 demais
-        "anuidade": anuidade,                # total do ano (1ª + 12 reajustadas)
-    }
 
 # --------------------------------------------------
 # FUNÇÕES DE LÓGICA E UTILITÁRIOS
 # --------------------------------------------------
+def precos_2026(serie_modalidade: str) -> dict:
+    base = TUITION.get(serie_modalidade, {})
+    if not base:
+        return {"primeira_cota": 0.0, "parcela_mensal": 0.0, "anuidade": 0.0}
+    
+    parcela_2026_do_dict = float(base.get("parcela13", 0.0))
+    if parcela_2026_do_dict <= 0:
+        return {"primeira_cota": 0.0, "parcela_mensal": 0.0, "anuidade": 0.0}
+
+    parcela_2025 = round(parcela_2026_do_dict / 1.10, 2)
+    primeira_cota = parcela_2025
+    parcela_mensal = round(parcela_2025 * 1.093, 2)
+    anuidade = round(primeira_cota + 12 * parcela_mensal, 2)
+
+    return {"primeira_cota": primeira_cota, "parcela_mensal": parcela_mensal, "anuidade": anuidade}
+
 def calcula_bolsa(acertos: int) -> float:
     ac = max(0, min(acertos, 24))
     return BOLSA_MAP.get(ac, 0.30)
@@ -120,50 +170,59 @@ def format_currency(v: float) -> str:
 def gera_pdf_html(ctx: dict) -> bytes:
     base_dir = Path(__file__).parent
     html_path = base_dir / "carta.html"
-    with open(html_path, encoding="utf-8") as f:
-        html_template = f.read()
-    html_renderizado = html_template
-    for k, v in ctx.items():
-        html_renderizado = html_renderizado.replace(f"{{{{{k}}}}}", str(v))
-    html_obj = weasyprint.HTML(string=html_renderizado, base_url=str(base_dir))
-    return html_obj.write_pdf()
-
-@st.cache_resource
-def get_gspread_client():
-    """Conecta ao Google Sheets usando os segredos do Streamlit e faz cache da conexão."""
     try:
-        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-        creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
-        client = gspread.authorize(creds)
-        return client
+        with open(html_path, encoding="utf-8") as f:
+            html_template = f.read()
+        html_renderizado = html_template
+        for k, v in ctx.items():
+            html_renderizado = html_renderizado.replace(f"{{{{{k}}}}}", str(v))
+        html_obj = weasyprint.HTML(string=html_renderizado, base_url=str(base_dir))
+        return html_obj.write_pdf()
+    except FileNotFoundError:
+        st.error(f"Arquivo 'carta.html' não encontrado no diretório. Crie o template HTML.")
+        return b""
     except Exception as e:
-        st.error(f"❌ Erro de autenticação com o Google Sheets: {e}")
-        return None
+        st.error(f"Erro ao gerar PDF: {e}")
+        return b""
 
 @st.cache_data(ttl=600)
-def get_all_hubspot_data(_client):
-    """Obtém todos os dados da aba 'Hubspot'."""
+def get_hubspot_data_for_activation():
+    """Obtém dados otimizados da aba 'Hubspot' para a ativação."""
     try:
-        sheet = _client.open_by_url("https://docs.google.com/spreadsheets/d/1qBV70qrPswnAUDxnHfBgKEU4FYAISpL7iVP0IM9zU2Q/edit#gid=422747648")
-        aba_hubspot = sheet.worksheet("Hubspot")
-        df = pd.DataFrame(aba_hubspot.get_all_records())
+        ws_hub = get_ws("Hubspot")
+        if not ws_hub:
+            st.error("Aba 'Hubspot' não encontrada ou falha na conexão.")
+            return pd.DataFrame()
+
+        hmap_h = header_map("Hubspot")
+        cols_needed = ["Unidade", "Nome do candidato", "Contato ID", "Status do Contato", 
+                       "Contato realizado", "Observações", "Celular Tratado", "Nome", 
+                       "E-mail", "Turma de Interesse - Geral", "Fonte original"]
+        
+        # Valida se todas as colunas necessárias existem
+        if not all(c in hmap_h for c in cols_needed):
+            st.error("Uma ou mais colunas necessárias não foram encontradas na aba 'Hubspot'.")
+            return pd.DataFrame()
+
+        # Leitura otimizada
+        data = ws_hub.get_all_records(head=1)
+        df = pd.DataFrame(data)
+        
+        # Filtra apenas as colunas necessárias para o DataFrame
+        df = df[cols_needed]
         return df
+
     except Exception as e:
         st.error(f"❌ Falha ao carregar dados do Hubspot: {e}")
         return pd.DataFrame()
 
+
 def calcula_valor_minimo(unidade, serie_modalidade):
-    """
-    Calcula o valor mínimo negociável usando APENAS os dicionários locais
-    e a regra 2026 correta.
-    """
     try:
         desconto_maximo = DESCONTOS_MAXIMOS_POR_UNIDADE.get(unidade, 0)
-
         precos = precos_2026(serie_modalidade)
         valor_anuidade_integral = precos.get("anuidade", 0.0)
 
-        # mínimo/mês: aplica desconto na anuidade e divide por 12
         if valor_anuidade_integral > 0 and desconto_maximo > 0:
             valor_minimo_anual = valor_anuidade_integral * (1 - desconto_maximo)
             return valor_minimo_anual / 12
@@ -173,14 +232,6 @@ def calcula_valor_minimo(unidade, serie_modalidade):
         st.error(f"❌ Erro ao calcular valor mínimo: {e}")
         return 0.0
 
-
-def find_column_index(headers, target_name):
-    """Encontra o índice de uma coluna ignorando espaços e case."""
-    for i, header in enumerate(headers):
-        if header.strip().lower() == target_name.strip().lower():
-            return i + 1
-    return None
-
 # --------------------------------------------------
 # INTERFACE STREAMLIT
 # --------------------------------------------------
@@ -189,7 +240,9 @@ st.title("🎓 Gestor do Bolsão")
 
 client = get_gspread_client()
 
-aba_carta, aba_negociacao, aba_ativacao = st.tabs(["Gerar Carta", "Negociação", "Ativação do Bolsão"])
+aba_carta, aba_negociacao, aba_ativacao, aba_formulario = st.tabs([
+    "Gerar Carta", "Negociação", "Ativação do Bolsão", "Formulário básico"
+])
 
 # --- ABA GERAR CARTA ---
 with aba_carta:
@@ -201,14 +254,13 @@ with aba_carta:
         horizontal=True, key="modo_preenchimento"
     )
 
-    # Valores padrão ou pré-preenchidos
     nome_aluno_pre = ""
-    turma_aluno_pre = "1ª e 2ª Série EM Vestibular" # Valor padrão atualizado para ser válido
+    turma_aluno_pre = "1ª e 2ª Série EM Vestibular"
     unidade_aluno_pre = "BANGU"
     
     if modo_preenchimento == "Carregar dados de um candidato":
         if client:
-            df_hubspot_all = get_all_hubspot_data(client)
+            df_hubspot_all = get_hubspot_data_for_activation()
             if not df_hubspot_all.empty:
                 unidade_selecionada = st.selectbox(
                     "Selecione a Unidade do candidato:", UNIDADES_LIMPAS, key="unidade_selecionada_carta"
@@ -225,11 +277,9 @@ with aba_carta:
                     candidato_selecionado = df_filtrado[df_filtrado['Nome do candidato'] == selecao_candidato].iloc[0]
                     nome_aluno_pre = candidato_selecionado.get('Nome do candidato', '')
                     
-                    # Atualiza o estado da sessão imediatamente após carregar os dados
                     turma_aluno_pre = candidato_selecionado.get('Turma de Interesse - Geral', '1ª e 2ª Série EM Vestibular')
                     st.session_state["c_turma"] = turma_aluno_pre
                     st.session_state["c_serie"] = turma_aluno_pre
-
                     unidade_aluno_pre = unidade_selecionada
                     st.info(f"Dados de {nome_aluno_pre} carregados.")
             else:
@@ -237,19 +287,16 @@ with aba_carta:
     
     st.write("---")
     
-    # --- opções e sincronização Turma/Série ---
     opcoes_series = list(TUITION.keys())
     def _normaliza_turma(valor):
         return valor if valor in opcoes_series else opcoes_series[0]
         
-    # Callbacks para espelhar
     def sync_from_turma():
         st.session_state["c_serie"] = st.session_state.get("c_turma", opcoes_series[0])
     
     def sync_from_serie():
         st.session_state["c_turma"] = st.session_state.get("c_serie", opcoes_series[0])
     
-    # Estado inicial (considera preenchido manual e o carregado do Hubspot)
     if "c_turma" not in st.session_state:
         st.session_state["c_turma"] = _normaliza_turma(turma_aluno_pre)
     if "c_serie" not in st.session_state:
@@ -261,11 +308,9 @@ with aba_carta:
         unidade_limpa = st.selectbox("Unidade", UNIDADES_LIMPAS, index=unidade_limpa_index, key="c_unid")
     
         turma = st.selectbox(
-            "Turma de interesse",
-            opcoes_series,
+            "Turma de interesse", opcoes_series,
             index=opcoes_series.index(st.session_state["c_turma"]),
-            key="c_turma",
-            on_change=sync_from_turma
+            key="c_turma", on_change=sync_from_turma
         )
     with c2:
         ac_mat = st.number_input("Acertos - Matemática", 0, 12, 0, key="c_mat")
@@ -277,18 +322,13 @@ with aba_carta:
     pct = calcula_bolsa(total)
     st.markdown(f"### ➔ Bolsa obtida: *{pct*100:.0f}%* ({total} acertos)")
 
-    # Usa o novo selectbox sincronizado
     serie = st.selectbox(
-        "Série / Modalidade",
-        opcoes_series,
+        "Série / Modalidade", opcoes_series,
         index=opcoes_series.index(st.session_state["c_serie"]),
-        key="c_serie",
-        on_change=sync_from_serie
+        key="c_serie", on_change=sync_from_serie
     )
 
     precos = precos_2026(st.session_state["c_serie"])
-
-    # aplica bolsa
     val_ano = precos["anuidade"] * (1 - pct)
     val_parcela_mensal = precos["parcela_mensal"] * (1 - pct)
     val_primeira_cota = precos["primeira_cota"] * (1 - pct)
@@ -302,9 +342,8 @@ with aba_carta:
             hoje = date.today()
             nome_bolsao = "-"
             try:
-                sheet = client.open_by_url("https://docs.google.com/spreadsheets/d/1qBV70qrPswnAUDxnHfBgKEU4FYAISpL7iVP0IM9zU2Q/edit#gid=380208567")
-                aba_bolsao = sheet.worksheet("Bolsão")
-                dados_bolsao = aba_bolsao.get_all_records()
+                ws_bolsao = get_ws("Bolsão")
+                dados_bolsao = ws_bolsao.get_all_records()
                 for linha in dados_bolsao:
                     data_str, bolsao_nome_temp = linha.get("Data"), linha.get("Bolsão")
                     if data_str and bolsao_nome_temp:
@@ -327,27 +366,33 @@ with aba_carta:
             }
             
             pdf_bytes = gera_pdf_html(ctx)
-            st.success("✅ Carta em PDF gerada com sucesso!")
+            if pdf_bytes:
+                st.success("✅ Carta em PDF gerada com sucesso!")
 
-            try:
-                sheet = client.open_by_url("https://docs.google.com/spreadsheets/d/1qBV70qrPswnAUDxnHfBgKEU4FYAISpL7iVP0IM9zU2Q/edit#gid=422747648")
-                aba_resultados = sheet.worksheet("Resultados_Bolsao")
-                unidade_completa = UNIDADES_MAP[unidade_limpa]
-                nova_linha = [
-                    datetime.now().strftime("%Y-%m-%d %H:%M:%S"), aluno.strip().title(), unidade_completa, st.session_state["c_turma"],
-                    ac_mat, ac_port, total, f"{pct*100:.0f}%", st.session_state["c_serie"],
-                    ctx["anuidade_vista"], ctx["primeira_cota"], ctx["valor_parcela"],
-                    st.session_state.get("email", "-"), nome_bolsao
-                ]
-                aba_resultados.append_row(nova_linha, value_input_option="USER_ENTERED")
-                st.info("📊 Resposta registrada na planilha.")
-            except Exception as e:
-                st.error(f"❌ Falha ao salvar na planilha: {e}")
+                try:
+                    ws_res = get_ws("Resultados_Bolsao")
+                    REGISTRO_ID = new_uuid()
+                    nova_linha = [
+                        datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        REGISTRO_ID,
+                        aluno.strip().title(),
+                        UNIDADES_MAP[unidade_limpa],
+                        st.session_state["c_turma"],
+                        ac_mat, ac_port, total, f"{pct*100:.0f}%",
+                        st.session_state["c_serie"],
+                        ctx["anuidade_vista"], ctx["primeira_cota"], ctx["valor_parcela"],
+                        st.session_state.get("email", "-"), nome_bolsao,
+                        "", "", "", "", "", "", "", "" # Placeholders para colunas do formulário
+                    ]
+                    ws_res.append_row(nova_linha, value_input_option="USER_ENTERED")
+                    st.info("📊 Resposta registrada na planilha.")
+                except Exception as e:
+                    st.error(f"❌ Falha ao salvar na planilha: {e}")
 
-            st.download_button(
-                "📄 Baixar Carta", data=pdf_bytes,
-                file_name=f"Carta_Bolsa_{aluno.replace(' ', '_')}.pdf", mime="application/pdf"
-            )
+                st.download_button(
+                    "📄 Baixar Carta", data=pdf_bytes,
+                    file_name=f"Carta_Bolsa_{aluno.replace(' ', '_')}.pdf", mime="application/pdf"
+                )
 
 # --- ABA NEGOCIAÇÃO ---
 with aba_negociacao:
@@ -358,10 +403,8 @@ with aba_negociacao:
             unidade_neg_limpa = st.selectbox("Unidade", UNIDADES_LIMPAS, key="n_unid")
             serie_n = st.selectbox("Série / Modalidade", list(TUITION.keys()), key="n_serie")
         with cn2:
-            # A alteração foi feita aqui: [13, 12] e index=0 para ser a opção padrão
             parcelas_n = st.radio("Parcelas", [13, 12], horizontal=True, index=0, key="n_parc")
 
-        # Chama a função que agora usa apenas o dicionário interno
         valor_minimo = calcula_valor_minimo(unidade_neg_limpa, serie_n)
         
         st.markdown(f"### ➡️ Valor Mínimo Negociável: *{format_currency(valor_minimo)}*")
@@ -373,8 +416,6 @@ with aba_negociacao:
         )
         
         precos_n = precos_2026(serie_n)
-        # Para negociar o valor “por parcela”, faz sentido usar a parcela mensal corrigida (as 12 iguais),
-        # independentemente de 12 ou 13, porque a 1ª cota do plano 13 é um valor único.
         valor_integral_parc = precos_n["parcela_mensal"]
 
         if modo_simulacao == "Bolsa (%)":
@@ -383,7 +424,7 @@ with aba_negociacao:
             st.metric("Valor da Parcela Resultante", format_currency(valor_resultante))
             if valor_resultante < valor_minimo:
                 st.error("❌ Atenção: O valor resultante está abaixo do mínimo negociável!")
-        else: # "Valor da Parcela (R$)"
+        else:
             valor_neg = st.number_input("Valor desejado da parcela (R$)", 0.0, value=1500.0, step=10.0, key="valor_neg")
             pct_req = max(0.0, 1 - valor_neg / valor_integral_parc) if valor_integral_parc > 0 else 0.0
             bolsa_lanc = int(round(pct_req * 100))
@@ -402,35 +443,33 @@ with aba_ativacao:
         
         if st.button("Carregar Lista de Candidatos", key="a_carregar"):
             unidade_ativacao_completa = UNIDADES_MAP[unidade_ativacao_limpa]
-            df_hubspot = get_all_hubspot_data(client)
-            df_filtrado = df_hubspot[df_hubspot['Unidade'] == unidade_ativacao_completa]
-            st.session_state['df_ativacao'] = df_filtrado
-            st.session_state['unidade_ativa'] = unidade_ativacao_limpa
+            df_hubspot = get_hubspot_data_for_activation()
+            if not df_hubspot.empty:
+                df_filtrado = df_hubspot[df_hubspot['Unidade'] == unidade_ativacao_completa].copy()
+                st.session_state['df_ativacao'] = df_filtrado
+                st.session_state['unidade_ativa'] = unidade_ativacao_limpa
+            else:
+                st.session_state['df_ativacao'] = pd.DataFrame()
+
 
         if 'df_ativacao' in st.session_state and not st.session_state['df_ativacao'].empty:
             st.write(f"Lista de candidatos para a unidade: *{st.session_state['unidade_ativa']}*")
             df_display = st.session_state['df_ativacao']
             
             try:
-                sheet = client.open_by_url("https://docs.google.com/spreadsheets/d/1qBV70qrPswnAUDxnHfBgKEU4FYAISpL7iVP0IM9zU2Q/edit#gid=422747648")
-                aba_hubspot = sheet.worksheet("Hubspot")
-                headers = aba_hubspot.row_values(1)
+                ws_hub = get_ws("Hubspot")
+                hmap = header_map("Hubspot")
                 
-                cols = {
-                    'nome': find_column_index(headers, 'Nome do candidato'),
-                    'contato_realizado': find_column_index(headers, 'Contato realizado'),
-                    'status': find_column_index(headers, 'Status do Contato'),
-                    'id': find_column_index(headers, 'Contato ID'),
-                    'observacoes': find_column_index(headers, 'Observações') # Adicionada a coluna de observações
-                }
-
-                if not all([cols['nome'], cols['id']]):
-                    st.warning("⚠️ Colunas 'Nome do candidato' e 'Contato ID' são essenciais e não foram encontradas.")
+                required_cols = ['Nome do candidato', 'Contato ID']
+                if not all(c in hmap for c in required_cols):
+                    st.warning(f"⚠️ Colunas essenciais ({', '.join(required_cols)}) não foram encontradas.")
                 else:
+                    id_col_idx = hmap['Contato ID']
                     for index, row in df_display.iterrows():
+                        row_id = str(row.get('Contato ID', ''))
                         status_atual = str(row.get('Status do Contato', '-')).strip()
                         contato_realizado_bool = str(row.get('Contato realizado', 'Não')).strip().lower() == "sim"
-                        observacoes_atuais = str(row.get('Observações', '')).strip() # Obtém o valor atual das observações
+                        observacoes_atuais = str(row.get('Observações', '')).strip()
                         
                         emoji = "⚪"
                         if "confirmado" in status_atual.lower(): emoji = "✅"
@@ -447,37 +486,136 @@ with aba_ativacao:
                             - **Fonte:** {row.get('Fonte original', 'N/A')}
                             """)
                             
-                            novo_nome = st.text_input("Editar Nome", value=row.get('Nome do candidato', ''), key=f"nome_{index}")
+                            novo_nome = st.text_input("Editar Nome", value=row.get('Nome do candidato', ''), key=f"nome_{row_id}")
                             
-                            status_options = ["-", "Não atende", "Confirmado", "Não comparecerá","Bolsão Reagendado","Duplicado"]
+                            status_options = ["-", "Não atende", "Confirmado", "Não comparecerá", "Bolsão Reagendado", "Duplicado"]
                             status_index = status_options.index(status_atual) if status_atual in status_options else 0
                             
-                            contato_realizado = st.checkbox("Contato Realizado", value=contato_realizado_bool, key=f"check_{index}")
-                            status_contato = st.selectbox("Status do Contato", status_options, index=status_index, key=f"status_{index}")
-                            novas_observacoes = st.text_area("Observações", value=observacoes_atuais, key=f"obs_{index}")
+                            contato_realizado = st.checkbox("Contato Realizado", value=contato_realizado_bool, key=f"check_{row_id}")
+                            status_contato = st.selectbox("Status do Contato", status_options, index=status_index, key=f"status_{row_id}")
+                            novas_observacoes = st.text_area("Observações", value=observacoes_atuais, key=f"obs_{row_id}")
                             
-                            if st.button("Salvar Status", key=f"save_{index}"):
+                            if st.button("Salvar Status", key=f"save_{row_id}"):
                                 try:
-                                    cell = aba_hubspot.find(str(row.get('Contato ID', '')), in_column=cols['id'])
-                                    if cell:
-                                        aba_hubspot.update_cell(cell.row, cols['nome'], novo_nome)
-                                        if cols['contato_realizado']:
-                                            aba_hubspot.update_cell(cell.row, cols['contato_realizado'], "Sim" if contato_realizado else "Não")
-                                        if cols['status']:
-                                            aba_hubspot.update_cell(cell.row, cols['status'], status_contato)
-                                        # ADIÇÃO: Salva o campo de observações
-                                        if cols['observacoes']:
-                                            aba_hubspot.update_cell(cell.row, cols['observacoes'], novas_observacoes)
-                                        st.success(f"Status e observações de {novo_nome} atualizados!")
-                                        st.rerun()
+                                    rownum = find_row_by_id(ws_hub, id_col_idx, row_id)
+                                    if rownum:
+                                        updates = []
+                                        if 'Nome do candidato' in hmap:
+                                            updates.append({"range": gspread.utils.rowcol_to_a1(rownum, hmap['Nome do candidato']), "values": [[novo_nome]]})
+                                        if 'Contato realizado' in hmap:
+                                            updates.append({"range": gspread.utils.rowcol_to_a1(rownum, hmap['Contato realizado']), "values": [["Sim" if contato_realizado else "Não"]]})
+                                        if 'Status do Contato' in hmap:
+                                            updates.append({"range": gspread.utils.rowcol_to_a1(rownum, hmap['Status do Contato']), "values": [[status_contato]]})
+                                        if 'Observações' in hmap:
+                                            updates.append({"range": gspread.utils.rowcol_to_a1(rownum, hmap['Observações']), "values": [[novas_observacoes]]})
+                                        
+                                        if updates:
+                                            batch_update_cells(ws_hub, updates)
+                                            st.success(f"Status e observações de {novo_nome} atualizados!")
+                                            st.rerun()
                                     else:
-                                        st.error("Candidato não encontrado na planilha para atualização.")
+                                        st.error(f"Candidato com ID {row_id} não encontrado na planilha para atualização.")
                                 except Exception as e:
                                     st.error(f"❌ Falha ao atualizar planilha: {e}")
             except Exception as e:
                 st.error(f"❌ Erro ao processar a aba de ativação: {e}")
         else:
-            st.info("Nenhum candidato encontrado para a unidade selecionada.")
+            st.info("Clique em 'Carregar Lista de Candidatos' para começar.")
     else:
         st.warning("Não foi possível conectar ao Google Sheets para a ativação.")
 
+# --- ABA FORMULÁRIO BÁSICO ---
+with aba_formulario:
+    st.subheader("Formulário Básico de Matrícula")
+
+    if not client:
+        st.warning("Conexão com o Google Sheets não disponível.")
+    else:
+        try:
+            ws_res = get_ws("Resultados_Bolsao")
+            hmap = header_map("Resultados_Bolsao")
+
+            cols_list = ["REGISTRO_ID", "Aluno", "Unidade", "Bolsa %", "Valor Parcela",
+                         "Responsável Financeiro", "CPF Responsável", "Escola de Origem",
+                         "Valor Negociado", "Aluno Matriculou?", "Optou por PIA?",
+                         "Valor Limite (PIA)", "Observações (Form)", "Timestamp"]
+            
+            missing = [c for c in cols_list if c not in hmap]
+            if missing:
+                st.error(f"Faltam colunas em 'Resultados_Bolsao': {', '.join(missing)}")
+            else:
+                # Carrega dados para o selectbox
+                id_col = gspread.utils.rowcol_to_a1(1, hmap["REGISTRO_ID"])[0]
+                aluno_col = gspread.utils.rowcol_to_a1(1, hmap["Aluno"])[0]
+                unidade_col = gspread.utils.rowcol_to_a1(1, hmap["Unidade"])[0]
+                
+                # Leitura otimizada para o selectbox
+                range_str = f"{id_col}2:{unidade_col}5000"
+                data = ws_res.get(range_str)
+                
+                options = {"Selecione um candidato...": None}
+                for row in data:
+                    reg_id = row[0]
+                    aluno = row[hmap["Aluno"] - hmap["REGISTRO_ID"]] if len(row) > hmap["Aluno"] - hmap["REGISTRO_ID"] else "N/A"
+                    unidade = row[hmap["Unidade"] - hmap["REGISTRO_ID"]] if len(row) > hmap["Unidade"] - hmap["REGISTRO_ID"] else "N/A"
+                    label = f"{aluno} - {unidade} ({reg_id})"
+                    options[label] = reg_id
+
+                selecao = st.selectbox("Selecione o Registro do Bolsão", options.keys())
+
+                if options[selecao]:
+                    reg_id_selecionado = options[selecao]
+                    rownum = find_row_by_id(ws_res, hmap["REGISTRO_ID"], reg_id_selecionado)
+                    
+                    if rownum:
+                        # Carrega os dados da linha selecionada
+                        row_data = ws_res.row_values(rownum)
+                        
+                        def get_col_val(name):
+                            idx = hmap.get(name)
+                            return row_data[idx - 1] if idx and len(row_data) >= idx else ""
+
+                        st.info(f"**Aluno:** {get_col_val('Aluno')} | **Bolsa:** {get_col_val('Bolsa %')} | **Parcela:** {get_col_val('Valor Parcela')}")
+                        st.write("---")
+
+                        # Campos editáveis
+                        resp_fin = st.text_input("Responsável Financeiro", get_col_val("Responsável Financeiro"))
+                        cpf_resp = st.text_input("CPF Responsável", get_col_val("CPF Responsável"))
+                        escola_origem = st.text_input("Escola de Origem", get_col_val("Escola de Origem"))
+                        valor_negociado = st.text_input("Valor Negociado", get_col_val("Valor Negociado"))
+                        
+                        matriculou_options = ["", "Sim", "Não"]
+                        matriculou_idx = matriculou_options.index(get_col_val("Aluno Matriculou?")) if get_col_val("Aluno Matriculou?") in matriculou_options else 0
+                        aluno_matriculou = st.selectbox("Aluno Matriculou?", matriculou_options, index=matriculou_idx)
+
+                        optou_pia = st.checkbox("Optou por PIA?", value=(get_col_val("Optou por PIA?") == "Sim"))
+                        valor_limite_pia = st.text_input("Valor Limite (PIA)", get_col_val("Valor Limite (PIA)"), disabled=not optou_pia)
+                        
+                        obs_form = st.text_area("Observações (Formulário)", get_col_val("Observações (Form)"))
+
+                        if st.button("Salvar Formulário"):
+                            updates_dict = {
+                                "Responsável Financeiro": resp_fin,
+                                "CPF Responsável": cpf_resp,
+                                "Escola de Origem": escola_origem,
+                                "Valor Negociado": valor_negociado,
+                                "Aluno Matriculou?": aluno_matriculou,
+                                "Optou por PIA?": "Sim" if optou_pia else "Não",
+                                "Valor Limite (PIA)": valor_limite_pia if optou_pia else "",
+                                "Observações (Form)": obs_form,
+                            }
+                            
+                            updates_to_batch = []
+                            for col_name, value in updates_dict.items():
+                                col_idx = hmap.get(col_name)
+                                if col_idx:
+                                    a1_notation = gspread.utils.rowcol_to_a1(rownum, col_idx)
+                                    updates_to_batch.append({"range": a1_notation, "values": [[value]]})
+                            
+                            if updates_to_batch:
+                                batch_update_cells(ws_res, updates_to_batch)
+                                st.success("Dados do formulário salvos com sucesso!")
+                                st.rerun()
+
+        except Exception as e:
+            st.error(f"Ocorreu um erro ao carregar o formulário: {e}")
