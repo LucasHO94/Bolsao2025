@@ -1,18 +1,21 @@
 # -*- coding: utf-8 -*-
 """
-Gerador_Carta_Bolsa.py (v7.6 - Remoção de Campos do Formulário)
+Gerador_Carta_Bolsa.py (v7.7 - Filtro por Bolsão no Formulário)
 -------------------------------------------------
 Aplicação Streamlit que gera cartas, gerencia negociações e ativações de bolsão,
 utilizando WeasyPrint para PDF e Pandas para manipulação de dados.
 
 # Histórico de alterações
+# v7.7 - 20/08/2025:
+# - Adicionado um segundo filtro para "Bolsão" na aba "Formulário básico".
+#   Agora o usuário filtra por Unidade e depois por Bolsão antes de ver a
+#   lista de alunos.
 # v7.6 - 20/08/2025:
 # - Removidos os campos "Responsável Financeiro" e "CPF Responsável" da
 #   aba "Formulário básico", conforme solicitado.
 # v7.5 - 20/08/2025:
 # - Corrigido o problema na aba "Formulário básico" onde a lista de alunos não
-#   era populada após selecionar a filial. A lógica de busca e filtro de dados
-#   foi otimizada para garantir o carregamento correto.
+#   era populada após selecionar a filial.
 # v7.4 - 20/08/2025:
 # - Adicionado filtro obrigatório por unidade na aba "Formulário básico".
 # v7.3 - 20/08/2025:
@@ -568,9 +571,9 @@ with aba_formulario:
             if ws_res:
                 hmap = header_map("Resultados_Bolsao")
 
-                # REMOVIDOS: "Responsável Financeiro", "CPF Responsável"
+                # ADICIONADO: "Bolsão" à lista de colunas necessárias
                 cols_list = ["REGISTRO_ID", "Nome do Aluno", "Unidade", "% Bolsa", "Valor da Mensalidade com Bolsa",
-                             "Escola de Origem", "Valor Negociado", "Aluno Matriculou?", "Optou por PIA?",
+                             "Bolsão", "Escola de Origem", "Valor Negociado", "Aluno Matriculou?", "Optou por PIA?",
                              "Valor Limite (PIA)", "Observações (Form)", "Data/Hora"]
                 
                 missing = [c for c in cols_list if c not in hmap]
@@ -583,8 +586,9 @@ with aba_formulario:
                         key="filtro_unidade_form"
                     )
 
+                    bolsao_options = ["Selecione..."]
                     options = {"Selecione um candidato...": None}
-
+                    
                     if unidade_selecionada_filtro != "Selecione...":
                         
                         @st.cache_data(ttl=60)
@@ -593,14 +597,26 @@ with aba_formulario:
 
                         all_data = get_form_data()
                         unidade_completa_filtro = UNIDADES_MAP[unidade_selecionada_filtro]
+                        
+                        unit_filtered_data = [row for row in all_data if row.get("Unidade") == unidade_completa_filtro]
+                        
+                        unique_bolsoes = sorted(list(set(row.get("Bolsão", "") for row in unit_filtered_data if row.get("Bolsão"))))
+                        bolsao_options.extend(unique_bolsoes)
 
-                        for row in all_data:
-                            if row.get("Unidade") == unidade_completa_filtro:
-                                reg_id = row.get("REGISTRO_ID")
-                                aluno = row.get("Nome do Aluno")
-                                if reg_id and aluno:
-                                    label = f"{aluno} ({reg_id})"
-                                    options[label] = reg_id
+                        bolsao_selecionado_filtro = st.selectbox(
+                            "Agora, selecione o bolsão",
+                            bolsao_options,
+                            key="filtro_bolsao_form"
+                        )
+
+                        if bolsao_selecionado_filtro != "Selecione...":
+                            for row in unit_filtered_data:
+                                if row.get("Bolsão") == bolsao_selecionado_filtro:
+                                    reg_id = row.get("REGISTRO_ID")
+                                    aluno = row.get("Nome do Aluno")
+                                    if reg_id and aluno:
+                                        label = f"{aluno} ({reg_id})"
+                                        options[label] = reg_id
 
                     selecao = st.selectbox("Selecione o Registro do Bolsão", options.keys())
 
@@ -618,7 +634,6 @@ with aba_formulario:
                             st.info(f"**Aluno:** {get_col_val('Nome do Aluno')} | **Bolsa:** {get_col_val('% Bolsa')} | **Parcela:** {get_col_val('Valor da Mensalidade com Bolsa')}")
                             st.write("---")
                             
-                            # REMOVIDOS: Inputs para Responsável e CPF
                             escola_origem = st.text_input("Escola de Origem", get_col_val("Escola de Origem"))
                             valor_negociado = st.text_input("Valor Negociado", get_col_val("Valor Negociado"))
                             
@@ -632,7 +647,6 @@ with aba_formulario:
                             obs_form = st.text_area("Observações (Form)", get_col_val("Observações (Form)"))
 
                             if st.button("Salvar Formulário"):
-                                # REMOVIDOS: "Responsável Financeiro", "CPF Responsável" do dict
                                 updates_dict = {
                                     "Escola de Origem": escola_origem,
                                     "Valor Negociado": valor_negociado,
