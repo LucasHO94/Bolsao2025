@@ -1,11 +1,17 @@
 # -*- coding: utf-8 -*-
 """
-Gerador_Carta_Bolsa.py (v8.0 - Correção de Grid Limits)
+Gerador_Carta_Bolsa.py (v8.1 - Melhorias no Formulário)
 -------------------------------------------------
 Aplicação Streamlit que gera cartas, gerencia negociações e ativações de bolsão,
 utilizando WeasyPrint para PDF e Pandas para manipulação de dados.
 
 # Histórico de alterações
+# v8.1 - 20/08/2025:
+# - Atualizada a aba "Formulário Básico" para usar st.number_input para valores
+#   monetários, melhorando a experiência do usuário.
+# - Adicionada a função parse_brl_to_float para converter valores em R$ para float.
+# - Removido o campo "Optou por PIA?" e adicionado fallback para a nova coluna
+#   "Menor valor negociável".
 # v8.0 - 20/08/2025:
 # - Corrigido o erro "exceeds grid limits" ao atualizar a função batch_update_cells
 #   para prefixar o nome da aba em ranges A1.
@@ -39,6 +45,7 @@ utilizando WeasyPrint para PDF e Pandas para manipulação de dados.
 # - Adicionada a aba "Formulário básico" e otimizações de performance.
 """
 import io
+import re
 import uuid
 from datetime import date, timedelta, datetime
 from functools import lru_cache
@@ -258,6 +265,21 @@ def format_currency(v: float) -> str:
         return f"R$ {v_float:,.2f}".replace(",", "@").replace(".", ",").replace("@", ".")
     except (ValueError, TypeError):
         return str(v)
+
+def parse_brl_to_float(x) -> float:
+    """Converte 'R$ 1.234,56' ou '1234,56' para 1234.56. Retorna 0.0 se vazio/ inválido."""
+    if isinstance(x, (int, float)):
+        return float(x)
+    if not x:
+        return 0.0
+    s = str(x).strip()
+    s = s.replace("R$", "").strip()
+    # remove separadores de milhar e troca vírgula decimal por ponto
+    s = s.replace(".", "").replace(",", ".")
+    try:
+        return float(s)
+    except Exception:
+        return 0.0
 
 def gera_pdf_html(ctx: dict) -> bytes:
     base_dir = Path(__file__).parent
@@ -646,11 +668,21 @@ with aba_formulario:
             if ws_res:
                 hmap = header_map("Resultados_Bolsao")
 
-                # ADICIONADO: "Bolsão" à lista de colunas necessárias
-                cols_list = ["REGISTRO_ID", "Nome do Aluno", "Unidade", "% Bolsa", "Valor da Mensalidade com Bolsa",
-                             "Bolsão", "Escola de Origem", "Valor Negociado", "Aluno Matriculou?", "Optou por PIA?",
-                             "Valor Limite (PIA)", "Observações (Form)", "Data/Hora"]
-                
+                # novo nome e fallback
+                COL_MENOR = "Menor valor negociável"
+                COL_MENOR_FALLBACK = "Valor Limite (PIA)"
+                menor_colname = COL_MENOR if COL_MENOR in hmap else (COL_MENOR_FALLBACK if COL_MENOR_FALLBACK in hmap else None)
+
+                # lista de colunas que precisamos (sem "Optou por PIA?")
+                cols_list = [
+                    "REGISTRO_ID", "Nome do Aluno", "Unidade", "% Bolsa",
+                    "Valor da Mensalidade com Bolsa", "Bolsão",
+                    "Escola de Origem", "Valor Negociado",
+                    "Aluno Matriculou?", "Observações (Form)", "Data/Hora"
+                ]
+                if menor_colname:
+                    cols_list.append(menor_colname)
+
                 missing = [c for c in cols_list if c not in hmap]
                 if missing:
                     st.error(f"Faltam colunas em 'Resultados_Bolsao': {', '.join(missing)}")
@@ -665,7 +697,6 @@ with aba_formulario:
                     options = {"Selecione um candidato...": None}
                     
                     if unidade_selecionada_filtro != "Selecione...":
-                        
                         @st.cache_data(ttl=60)
                         def get_form_data():
                             return ws_res.get_all_records()
@@ -706,30 +737,46 @@ with aba_formulario:
                                 idx = hmap.get(name)
                                 return row_data[idx - 1] if idx and len(row_data) >= idx else ""
 
-                            st.info(f"**Aluno:** {get_col_val('Nome do Aluno')} | **Bolsa:** {get_col_val('% Bolsa')} | **Parcela:** {get_col_val('Valor da Mensalidade com Bolsa')}")
+                            st.info(
+                                f"**Aluno:** {get_col_val('Nome do Aluno')} | "
+                                f"**Bolsa:** {get_col_val('% Bolsa')} | "
+                                f"**Parcela:** {get_col_val('Valor da Mensalidade com Bolsa')}"
+                            )
                             st.write("---")
                             
+                            # Campos
                             escola_origem = st.text_input("Escola de Origem", get_col_val("Escola de Origem"))
-                            valor_negociado = st.text_input("Valor Negociado", get_col_val("Valor Negociado"))
-                            
+
+                            # número puro (com step e min), mas salvaremos em BRL formatado
+                            valor_neg_ini = parse_brl_to_float(get_col_val("Valor Negociado"))
+                            valor_neg_num = st.number_input(
+                                "Valor negociado (R$)", min_value=0.0, step=10.0,
+                                value=valor_neg_ini, format="%.2f", key="valor_neg_num"
+                            )
+
                             matriculou_options = ["", "Sim", "Não"]
-                            matriculou_idx = matriculou_options.index(get_col_val("Aluno Matriculou?")) if get_col_val("Aluno Matriculou?") in matriculou_options else 0
+                            matriculou_idx = matriculou_options.index(get_col_val("Aluno Matriculou?")) \
+                                if get_col_val("Aluno Matriculou?") in matriculou_options else 0
                             aluno_matriculou = st.selectbox("Aluno Matriculou?", matriculou_options, index=matriculou_idx)
 
-                            optou_pia = st.checkbox("Optou por PIA?", value=(get_col_val("Optou por PIA?") == "Sim"))
-                            valor_limite_pia = st.text_input("Valor Limite (PIA)", get_col_val("Valor Limite (PIA)"), disabled=not optou_pia)
+                            # novo campo (ou fallback para o antigo nome)
+                            menor_val_ini = parse_brl_to_float(get_col_val(menor_colname) if menor_colname else "")
+                            menor_val_num = st.number_input(
+                                "Menor valor negociável (R$)", min_value=0.0, step=10.0,
+                                value=menor_val_ini, format="%.2f", key="menor_val_num"
+                            )
                             
                             obs_form = st.text_area("Observações (Form)", get_col_val("Observações (Form)"))
 
                             if st.button("Salvar Formulário"):
                                 updates_dict = {
                                     "Escola de Origem": escola_origem,
-                                    "Valor Negociado": valor_negociado,
+                                    "Valor Negociado": format_currency(valor_neg_num),
                                     "Aluno Matriculou?": aluno_matriculou,
-                                    "Optou por PIA?": "Sim" if optou_pia else "Não",
-                                    "Valor Limite (PIA)": valor_limite_pia if optou_pia else "",
                                     "Observações (Form)": obs_form,
                                 }
+                                if menor_colname:
+                                    updates_dict[menor_colname] = format_currency(menor_val_num)
                                 
                                 updates_to_batch = []
                                 for col_name, value in updates_dict.items():
