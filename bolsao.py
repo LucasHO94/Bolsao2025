@@ -1,18 +1,20 @@
 # -*- coding: utf-8 -*-
 """
-Gerador_Carta_Bolsa.py (v7.7 - Filtro por Bolsão no Formulário)
+Gerador_Carta_Bolsa.py (v7.8 - Mapeamento de Turmas)
 -------------------------------------------------
 Aplicação Streamlit que gera cartas, gerencia negociações e ativações de bolsão,
 utilizando WeasyPrint para PDF e Pandas para manipulação de dados.
 
 # Histórico de alterações
+# v7.8 - 20/08/2025:
+# - Implementado o mapeamento "de-para" entre "Turma de interesse" e "Série /
+#   Modalidade" na aba "Gerar Carta". O campo de série agora é preenchido
+#   automaticamente com base na seleção da turma.
 # v7.7 - 20/08/2025:
 # - Adicionado um segundo filtro para "Bolsão" na aba "Formulário básico".
-#   Agora o usuário filtra por Unidade e depois por Bolsão antes de ver a
-#   lista de alunos.
 # v7.6 - 20/08/2025:
 # - Removidos os campos "Responsável Financeiro" e "CPF Responsável" da
-#   aba "Formulário básico", conforme solicitado.
+#   aba "Formulário básico".
 # v7.5 - 20/08/2025:
 # - Corrigido o problema na aba "Formulário básico" onde a lista de alunos não
 #   era populada após selecionar a filial.
@@ -141,6 +143,43 @@ TUITION = {
     "Medicina (Pré)": {"anuidade": 14668.50, "parcela13": 1128.35},
     "Pré-Vestibular": {"anuidade": 14668.50, "parcela13": 1128.35},
 }
+
+# NOVO: Mapeamento de Turma de Interesse para Série/Modalidade
+TURMA_DE_INTERESSE_MAP = {
+    "1ª série IME ITA Jr": "1ª e 2ª Série EM Militar",
+    "1ª série do EM - Militar": "1ª e 2ª Série EM Militar",
+    "1ª série do EM - Pré-Vestibular": "1ª e 2ª Série EM Vestibular",
+    "1º ano do EF1": "1º ao 5º Ano",
+    "2ª série IME ITA Jr": "1ª e 2ª Série EM Militar",
+    "2ª série do EM - Militar": "1ª e 2ª Série EM Militar",
+    "2ª série do EM - Pré-Vestibular": "1ª e 2ª Série EM Vestibular",
+    "2º ano do EF1": "1º ao 5º Ano",
+    "3ª série do EM - AFA EN EFOMM": "3ª Série (PV/PM)",
+    "3ª série do EM - ESA": "3ª Série (PV/PM)",
+    "3ª série do EM - EsPCEx": "3ª Série (PV/PM)",
+    "3ª série do EM - IME ITA": "3ª Série (PV/PM)",
+    "3ª série do EM - Medicina": "3ª Série EM Medicina",
+    "3ª série do EM - Pré-Vestibular": "3ª Série (PV/PM)",
+    "3º ano do EF1": "1º ao 5º Ano",
+    "4º ano do EF1": "1º ao 5º Ano",
+    "5º ano do EF1": "1º ao 5º Ano",
+    "6º ano do EF2": "6º ao 8º Ano",
+    "7º ano do EF2": "6º ao 8º Ano",
+    "8º ano do EF2": "6º ao 8º Ano",
+    "9º ano do EF2 - Militar": "9º Ano EF II Militar",
+    "9º ano do EF2 - Vestibular": "9º Ano EF II Vestibular",
+    "Pré-Militar AFA EN EFOMM": "AFA/EN/EFOMM",
+    "Pré-Militar CN EPCAr": "CN/EPCAr",
+    "Pré-Militar ESA": "ESA",
+    "Pré-Militar EsPCEx": "EsPCEx",
+    "Pré-Militar IME ITA": "IME/ITA",
+    "Pré-Vestibular": "Pré-Vestibular",
+    "Pré-Vestibular - Medicina": "Medicina (Pré)",
+}
+
+# NOVO: Mapa reverso para carregar dados do Hubspot
+SERIE_TO_TURMA_MAP = {v: k for k, v in reversed(list(TURMA_DE_INTERESSE_MAP.items()))}
+
 
 UNIDADES_COMPLETAS = [
     "COLEGIO E CURSO MATRIZ EDUCACAO CAMPO GRANDE", "COLEGIO E CURSO MATRIZ EDUCAÇÃO TAQUARA",
@@ -271,8 +310,9 @@ with aba_carta:
     )
 
     nome_aluno_pre = ""
-    turma_aluno_pre = "1ª e 2ª Série EM Vestibular"
+    serie_modalidade_pre = "1ª e 2ª Série EM Vestibular"
     unidade_aluno_pre = "BANGU"
+    opcoes_turma_interesse = list(TURMA_DE_INTERESSE_MAP.keys())
     
     if modo_preenchimento == "Carregar dados de um candidato":
         if client:
@@ -293,42 +333,38 @@ with aba_carta:
                     candidato_selecionado = df_filtrado[df_filtrado['Nome do candidato'] == selecao_candidato].iloc[0]
                     nome_aluno_pre = candidato_selecionado.get('Nome do candidato', '')
                     
-                    turma_aluno_pre = candidato_selecionado.get('Turma de Interesse - Geral', '1ª e 2ª Série EM Vestibular')
-                    # Seta o session state para os dois campos sincronizados
-                    st.session_state["c_turma"] = turma_aluno_pre
-                    st.session_state["c_serie"] = turma_aluno_pre
+                    serie_modalidade_pre = candidato_selecionado.get('Turma de Interesse - Geral', '1ª e 2ª Série EM Vestibular')
                     unidade_aluno_pre = unidade_selecionada
+
+                    turma_interesse_carregada = SERIE_TO_TURMA_MAP.get(serie_modalidade_pre, opcoes_turma_interesse[0])
+
+                    st.session_state.c_turma = turma_interesse_carregada
+                    st.session_state.c_serie = serie_modalidade_pre
+                    
                     st.info(f"Dados de {nome_aluno_pre} carregados.")
             else:
                 st.warning("Nenhum candidato encontrado. Verifique se há erros de coluna na aba 'Ativação'.")
     
     st.write("---")
     
-    opcoes_series = list(TUITION.keys())
-    def _normaliza_turma(valor):
-        return valor if valor in opcoes_series else opcoes_series[0]
-        
-    def sync_from_turma():
-        st.session_state.c_serie = st.session_state.c_turma
+    def update_serie_from_turma():
+        st.session_state.c_serie = TURMA_DE_INTERESSE_MAP.get(st.session_state.c_turma)
     
-    def sync_from_serie():
-        st.session_state.c_turma = st.session_state.c_serie
-    
-    # Inicializa o estado da sessão se ainda não existir
     if "c_turma" not in st.session_state:
-        st.session_state.c_turma = _normaliza_turma(turma_aluno_pre)
-    if "c_serie" not in st.session_state:
-        st.session_state.c_serie = st.session_state.c_turma
+        default_turma = SERIE_TO_TURMA_MAP.get(serie_modalidade_pre, opcoes_turma_interesse[0])
+        st.session_state.c_turma = default_turma
+        st.session_state.c_serie = serie_modalidade_pre
 
     c1, c2 = st.columns(2)
     with c1:
         unidade_limpa_index = UNIDADES_LIMPAS.index(unidade_aluno_pre) if unidade_aluno_pre in UNIDADES_LIMPAS else 0
         unidade_limpa = st.selectbox("Unidade", UNIDADES_LIMPAS, index=unidade_limpa_index, key="c_unid")
     
-        # CORREÇÃO: Removido o parâmetro 'index' para evitar conflito com o session state
         turma = st.selectbox(
-            "Turma de interesse", opcoes_series,
-            key="c_turma", on_change=sync_from_turma
+            "Turma de interesse",
+            opcoes_turma_interesse,
+            key="c_turma",
+            on_change=update_serie_from_turma
         )
     with c2:
         ac_mat = st.number_input("Acertos - Matemática", 0, 12, 0, key="c_mat")
@@ -340,10 +376,10 @@ with aba_carta:
     pct = calcula_bolsa(total)
     st.markdown(f"### ➔ Bolsa obtida: *{pct*100:.0f}%* ({total} acertos)")
 
-    # CORREÇÃO: Removido o parâmetro 'index' para evitar conflito com o session state
-    serie = st.selectbox(
-        "Série / Modalidade", opcoes_series,
-        key="c_serie", on_change=sync_from_serie
+    serie = st.text_input(
+        "Série / Modalidade (para cálculo)",
+        key="c_serie",
+        disabled=True
     )
 
     precos = precos_2026(st.session_state.c_serie)
