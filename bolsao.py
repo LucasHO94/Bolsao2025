@@ -1,11 +1,15 @@
 # -*- coding: utf-8 -*-
 """
-Gerador_Carta_Bolsa.py (v8.5 - Otimização de Leituras no Formulário)
+Gerador_Carta_Bolsa.py (v8.6 - Correção de API do Sheets)
 -------------------------------------------------
 Aplicação Streamlit que gera cartas, gerencia negociações e ativações de bolsão,
 utilizando WeasyPrint para PDF e Pandas para manipulação de dados.
 
 # Histórico de alterações
+# v8.6 - 21/08/2025:
+# - Corrigido o erro "unexpected keyword argument 'value_render_option'" na
+#   chamada da API do Google Sheets (values_batch_get), ajustando a passagem
+#   de parâmetros.
 # v8.5 - 21/08/2025:
 # - Otimizada a aba "Formulário Básico" para reduzir drasticamente as leituras
 #   da API do Google Sheets, resolvendo o erro 429 (Too Many Requests).
@@ -146,8 +150,10 @@ def batch_get_values_prefixed(ws, ranges, value_render_option="UNFORMATTED_VALUE
         return []
     title_safe = ws.title.replace("'", "''")
     prefixed = [f"'{title_safe}'!{r}" if "!" not in r else r for r in ranges]
-    # gspread: Spreadsheet.values_batch_get(ranges, **kwargs)
-    resp = ws.spreadsheet.values_batch_get(prefixed, value_render_option=value_render_option)
+    
+    # CORREÇÃO: Passa o value_render_option dentro de um dicionário 'params'.
+    params = {'valueRenderOption': value_render_option}
+    resp = ws.spreadsheet.values_batch_get(prefixed, params=params)
     return resp.get("valueRanges", [])
 
 @st.cache_data(ttl=300)
@@ -849,3 +855,14 @@ with aba_valores:
             "Condição à vista 7% até 30/09/2025": st.column_config.NumberColumn(format="R$ %.2f"),
         },
     )
+
+    # Botão para baixar CSV
+    csv_bytes = df_display.to_csv(index=False).encode("utf-8")
+    st.download_button(
+        "Baixar tabela (CSV)",
+        data=csv_bytes,
+        file_name="valores_2026.csv",
+        mime="text/csv",
+        key="baixar_valores_2026"
+    )
+" and the query is "Ocorreu um erro ao carregar o formulário: Spreadsheet.values_batch_get() got an unexpected keyword argument 'value_render_option
