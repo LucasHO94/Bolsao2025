@@ -1,11 +1,14 @@
 # -*- coding: utf-8 -*-
 """
-Gerador_Carta_Bolsa.py (v8.3 - Seletor de Colunas)
+Gerador_Carta_Bolsa.py (v8.4 - Padrão de Colunas)
 -------------------------------------------------
 Aplicação Streamlit que gera cartas, gerencia negociações e ativações de bolsão,
 utilizando WeasyPrint para PDF e Pandas para manipulação de dados.
 
 # Histórico de alterações
+# v8.4 - 21/08/2025:
+# - Ajustado o padrão de exibição de colunas na aba "Valores" para
+#   excluir "Anuidade 25", "% Reajuste 2026" e "Quantidade demais parcelas".
 # v8.3 - 21/08/2025:
 # - Adicionado um seletor de colunas (st.multiselect) na aba "Valores" para
 #   permitir ao usuário escolher quais colunas exibir na tabela.
@@ -16,14 +19,9 @@ utilizando WeasyPrint para PDF e Pandas para manipulação de dados.
 # v8.1 - 20/08/2025:
 # - Atualizada a aba "Formulário Básico" para usar st.number_input para valores
 #   monetários, melhorando a experiência do usuário.
-# - Adicionada a função parse_brl_to_float para converter valores em R$ para float.
-# - Removido o campo "Optou por PIA?" e adicionado fallback para a nova coluna
-#   "Menor valor negociável".
 # v8.0 - 20/08/2025:
 # - Corrigido o erro "exceeds grid limits" ao atualizar a função batch_update_cells
 #   para prefixar o nome da aba em ranges A1.
-# - Adicionada a função ensure_size para garantir um tamanho mínimo para a planilha
-#   de resultados, prevenindo erros de escrita.
 """
 import io
 import re
@@ -737,12 +735,15 @@ with aba_valores:
     else:
         df_filtrado = df
 
-    # NOVO: Seletor de colunas
+    # NOVO: Seletor de colunas com padrão modificado
     all_columns = df.columns.tolist()
+    cols_to_exclude = ["Anuidade 25", "% Reajuste 2026", "Quantidade demais parcelas"]
+    default_cols = [col for col in all_columns if col not in cols_to_exclude]
+    
     selected_columns = st.multiselect(
         "Selecione as colunas para exibir",
         options=all_columns,
-        default=all_columns,
+        default=default_cols,
         key="col_selector"
     )
 
