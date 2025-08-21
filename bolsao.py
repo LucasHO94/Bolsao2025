@@ -1,11 +1,15 @@
 # -*- coding: utf-8 -*-
 """
-Gerador_Carta_Bolsa.py (v8.1 - Melhorias no Formulário)
+Gerador_Carta_Bolsa.py (v8.2 - Nova Aba de Valores)
 -------------------------------------------------
 Aplicação Streamlit que gera cartas, gerencia negociações e ativações de bolsão,
 utilizando WeasyPrint para PDF e Pandas para manipulação de dados.
 
 # Histórico de alterações
+# v8.2 - 21/08/2025:
+# - Removida a aba "Ativação do Bolsão".
+# - Adicionada a nova aba "Valores" com uma tabela de consulta estática
+#   para os valores de 2026, incluindo filtro e opção de download em CSV.
 # v8.1 - 20/08/2025:
 # - Atualizada a aba "Formulário Básico" para usar st.number_input para valores
 #   monetários, melhorando a experiência do usuário.
@@ -17,32 +21,6 @@ utilizando WeasyPrint para PDF e Pandas para manipulação de dados.
 #   para prefixar o nome da aba em ranges A1.
 # - Adicionada a função ensure_size para garantir um tamanho mínimo para a planilha
 #   de resultados, prevenindo erros de escrita.
-# v7.9 - 20/08/2025:
-# - Corrigido o nome da coluna "Contato realizado" para "Contato Realizado" na
-#   função de busca de dados do Hubspot.
-# v7.8 - 20/08/2025:
-# - Implementado o mapeamento "de-para" entre "Turma de interesse" e "Série /
-#   Modalidade" na aba "Gerar Carta".
-# v7.7 - 20/08/2025:
-# - Adicionado um segundo filtro para "Bolsão" na aba "Formulário básico".
-# v7.6 - 20/08/2025:
-# - Removidos os campos "Responsável Financeiro" e "CPF Responsável" da
-#   aba "Formulário básico".
-# v7.5 - 20/08/2025:
-# - Corrigido o problema na aba "Formulário básico" onde a lista de alunos não
-#   era populada após selecionar a filial.
-# v7.4 - 20/08/2025:
-# - Adicionado filtro obrigatório por unidade na aba "Formulário básico".
-# v7.3 - 20/08/2025:
-# - Corrigido erro "list index out of range" na aba "Formulário básico".
-# v7.2 - 20/08/2025:
-# - Corrigido erro de "Session State API" na aba "Gerar Carta".
-# - Melhorada a mensagem de erro para colunas ausentes na aba "Ativação".
-# - Implementada gravação de dados robusta baseada no cabeçalho da planilha.
-# v7.1 - 20/08/2025:
-# - Corrigidos os nomes das colunas na aba "Formulário básico".
-# v7.0 - 20/08/2025:
-# - Adicionada a aba "Formulário básico" e otimizações de performance.
 """
 import io
 import re
@@ -354,8 +332,9 @@ st.title("🎓 Gestor do Bolsão")
 
 client = get_gspread_client()
 
-aba_carta, aba_negociacao, aba_ativacao, aba_formulario = st.tabs([
-    "Gerar Carta", "Negociação", "Ativação do Bolsão", "Formulário básico"
+# REMOVIDO: aba_ativacao
+aba_carta, aba_negociacao, aba_formulario, aba_valores = st.tabs([
+    "Gerar Carta", "Negociação", "Formulário básico", "Valores"
 ])
 
 # --- ABA GERAR CARTA ---
@@ -566,95 +545,6 @@ with aba_negociacao:
     else:
         st.warning("Não foi possível conectar ao Google Sheets para a negociação.")
 
-# --- ABA ATIVAÇÃO DO BOLSÃO ---
-with aba_ativacao:
-    st.subheader("Ativação de Bolsão")
-    if client:
-        unidade_ativacao_limpa = st.selectbox("Selecione a Unidade para Ativação", UNIDADES_LIMPAS, key="a_unid")
-        
-        if st.button("Carregar Lista de Candidatos", key="a_carregar"):
-            unidade_ativacao_completa = UNIDADES_MAP[unidade_ativacao_limpa]
-            df_hubspot = get_hubspot_data_for_activation()
-            if not df_hubspot.empty:
-                df_filtrado = df_hubspot[df_hubspot['Unidade'] == unidade_ativacao_completa].copy()
-                st.session_state['df_ativacao'] = df_filtrado
-                st.session_state['unidade_ativa'] = unidade_ativacao_limpa
-            else:
-                st.session_state['df_ativacao'] = pd.DataFrame()
-
-
-        if 'df_ativacao' in st.session_state and not st.session_state['df_ativacao'].empty:
-            st.write(f"Lista de candidatos para a unidade: *{st.session_state['unidade_ativa']}*")
-            df_display = st.session_state['df_ativacao']
-            
-            try:
-                ws_hub = get_ws("Hubspot")
-                hmap = header_map("Hubspot")
-                
-                required_cols = ['Nome do candidato', 'Contato ID']
-                if not all(c in hmap for c in required_cols):
-                    st.warning(f"⚠️ Colunas essenciais ({', '.join(required_cols)}) não foram encontradas.")
-                else:
-                    id_col_idx = hmap['Contato ID']
-                    for index, row in df_display.iterrows():
-                        row_id = str(row.get('Contato ID', ''))
-                        status_atual = str(row.get('Status do Contato', '-')).strip()
-                        contato_realizado_bool = str(row.get('Contato realizado', 'Não')).strip().lower() == "sim"
-                        observacoes_atuais = str(row.get('Observações', '')).strip()
-                        
-                        emoji = "⚪"
-                        if "confirmado" in status_atual.lower(): emoji = "✅"
-                        elif "não atende" in status_atual.lower(): emoji = "📞"
-                        elif "não comparecerá" in status_atual.lower(): emoji = "❌"
-                        elif contato_realizado_bool: emoji = "✅"
-
-                        expander_title = f"{emoji} *{row.get('Nome do candidato', 'N/A')}* | Status: *{status_atual}* | Cel: {row.get('Celular Tratado', 'N/A')}"
-                        with st.expander(expander_title):
-                            st.markdown(f"""
-                            - **Responsável:** {row.get('Nome', 'N/A')}
-                            - **E-mail:** {row.get('E-mail', 'N/A')}
-                            - **Turma:** {row.get('Turma de Interesse - Geral', 'N/A')}
-                            - **Fonte:** {row.get('Fonte original', 'N/A')}
-                            """)
-                            
-                            novo_nome = st.text_input("Editar Nome", value=row.get('Nome do candidato', ''), key=f"nome_{row_id}")
-                            
-                            status_options = ["-", "Não atende", "Confirmado", "Não comparecerá", "Bolsão Reagendado", "Duplicado"]
-                            status_index = status_options.index(status_atual) if status_atual in status_options else 0
-                            
-                            contato_realizado = st.checkbox("Contato Realizado", value=contato_realizado_bool, key=f"check_{row_id}")
-                            status_contato = st.selectbox("Status do Contato", status_options, index=status_index, key=f"status_{row_id}")
-                            novas_observacoes = st.text_area("Observações", value=observacoes_atuais, key=f"obs_{row_id}")
-                            
-                            if st.button("Salvar Status", key=f"save_{row_id}"):
-                                try:
-                                    rownum = find_row_by_id(ws_hub, id_col_idx, row_id)
-                                    if rownum:
-                                        updates = []
-                                        if 'Nome do candidato' in hmap:
-                                            updates.append({"range": gspread.utils.rowcol_to_a1(rownum, hmap['Nome do candidato']), "values": [[novo_nome]]})
-                                        if 'Contato Realizado' in hmap: # Usa o nome correto da coluna
-                                            updates.append({"range": gspread.utils.rowcol_to_a1(rownum, hmap['Contato Realizado']), "values": [["Sim" if contato_realizado else "Não"]]})
-                                        if 'Status do Contato' in hmap:
-                                            updates.append({"range": gspread.utils.rowcol_to_a1(rownum, hmap['Status do Contato']), "values": [[status_contato]]})
-                                        if 'Observações' in hmap:
-                                            updates.append({"range": gspread.utils.rowcol_to_a1(rownum, hmap['Observações']), "values": [[novas_observacoes]]})
-                                        
-                                        if updates:
-                                            batch_update_cells(ws_hub, updates)
-                                            st.success(f"Status e observações de {novo_nome} atualizados!")
-                                            st.rerun()
-                                    else:
-                                        st.error(f"Candidato com ID {row_id} não encontrado na planilha para atualização.")
-                                except Exception as e:
-                                    st.error(f"❌ Falha ao atualizar planilha: {e}")
-            except Exception as e:
-                st.error(f"❌ Erro ao processar a aba de ativação: {e}")
-        else:
-            st.info("Clique em 'Carregar Lista de Candidatos' para começar.")
-    else:
-        st.warning("Não foi possível conectar ao Google Sheets para a negociação.")
-
 # --- ABA FORMULÁRIO BÁSICO ---
 with aba_formulario:
     st.subheader("Formulário Básico de Matrícula")
@@ -792,3 +682,78 @@ with aba_formulario:
 
         except Exception as e:
             st.error(f"Ocorreu um erro ao carregar o formulário: {e}")
+
+# --- ABA VALORES ---
+with aba_valores:
+    st.subheader("Valores 2026 (Tabela)")
+
+    # Dados base (numéricos) — iguais aos da sua tabela
+    linhas = [
+        # Curso, Série, Anuidade25, Reajuste2026(%), PrimeiraCota, QtdDemais, MensalidadeTabela, AnuidadeTabela, AVista7
+        ("EFI",  "1º Ano",               24013.00, 10.00, 2031.85, 12, 2031.85, 26414.00, 24565.02),
+        ("EFI",  "2º Ano",               24013.00, 10.00, 2031.85, 12, 2031.85, 26414.00, 24565.02),
+        ("EFI",  "3º Ano",               24013.00, 10.00, 2031.85, 12, 2031.85, 26414.00, 24565.02),
+        ("EFI",  "4º Ano",               24013.00, 10.00, 2031.85, 12, 2031.85, 26414.00, 24565.02),
+        ("EFI",  "5º Ano",               24013.00, 10.00, 2031.85, 12, 2031.85, 26414.00, 24565.02),
+
+        ("EFII", "6º Ano",               28247.00, 10.00, 2390.15, 12, 2390.15, 31072.00, 28896.96),
+        ("EFII", "7º Ano",               28247.00, 10.00, 2390.15, 12, 2390.15, 31072.00, 28896.96),
+        ("EFII", "8º Ano",               28247.00, 10.00, 2390.15, 12, 2390.15, 31072.00, 28896.96),
+        ("EFII", "9º Ano - Militar",     30762.00, 10.00, 2602.92, 12, 2602.92, 33838.00, 31469.34),
+        ("EFII", "9º Ano - Vestibular",  30762.00, 10.00, 2602.92, 12, 2602.92, 33838.00, 31469.34),
+
+        ("EM",   "1ª Série - Militar",   33036.00, 10.00, 2795.38, 12, 2795.38, 36340.00, 33796.20),
+        ("EM",   "1ª Série - Vestibular",33036.00, 10.00, 2795.38, 12, 2795.38, 36340.00, 33796.20),
+        ("EM",   "2ª Série - Militar",   33036.00, 10.00, 2795.38, 12, 2795.38, 36340.00, 33796.20),
+        ("EM",   "2ª Série - Vestibular",33036.00, 10.00, 2795.38, 12, 2795.38, 36340.00, 33796.20),
+        ("EM",   "3ª série - Medicina",  33164.00, 10.00, 2806.15, 12, 2806.15, 36480.00, 33926.40),
+        ("EM",   "3ª Série - Militar",   33164.00, 10.00, 2806.15, 12, 2806.15, 36480.00, 33926.40),
+        ("EM",   "3ª Série - Vestibular",33164.00, 10.00, 2806.15, 12, 2806.15, 36480.00, 33926.40),
+
+        ("PM",   "AFA/EN/EFOMM",         13335.00, 10.00, 1128.38, 12, 1128.38, 14669.00, 13642.17),
+        ("PM",   "CN/EPCAr",              7985.00, 10.00,  675.69, 12,  675.69,  8784.00,  8169.12),
+        ("PM",   "ESA",                    6437.00, 10.00,  544.69, 12,  544.69,  7081.00,  6585.33),
+        ("PM",   "EsPCEx",                13335.00, 10.00, 1128.38, 12, 1128.38, 14669.00, 13642.17),
+        ("PM",   "IME/ITA",               13335.00, 10.00, 1128.38, 12, 1128.38, 14669.00, 13642.17),
+
+        ("PV",   "Medicina",              13335.00, 10.00, 1128.38, 12, 1128.38, 14669.00, 13642.17),
+        ("PV",   "Pré-Vestibular",        13335.00, 10.00, 1128.38, 12, 1128.38, 14669.00, 13642.17),
+    ]
+
+    df = pd.DataFrame(linhas, columns=[
+        "Curso", "Série", "Anuidade 25", "% Reajuste 2026", "1ª Cota",
+        "Quantidade demais parcelas", "Mensalidade Tabela", "Anuidade Tabela",
+        "Condição à vista 7% até 30/09/2025"
+    ])
+
+    # (Opcional) Filtro simples por Curso
+    cursos = ["Todos"] + sorted(df["Curso"].unique().tolist())
+    curso_sel = st.selectbox("Filtrar por curso", cursos, index=0, key="valores_filtro_curso")
+    if curso_sel != "Todos":
+        df = df[df["Curso"] == curso_sel].reset_index(drop=True)
+
+    # Tabela com formatação numérica (sem converter para string)
+    st.dataframe(
+        df,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Anuidade 25": st.column_config.NumberColumn(format="R$ %.2f"),
+            "% Reajuste 2026": st.column_config.NumberColumn(format="%.2f%%"),
+            "1ª Cota": st.column_config.NumberColumn(format="R$ %.2f"),
+            "Quantidade demais parcelas": st.column_config.NumberColumn(format="%d"),
+            "Mensalidade Tabela": st.column_config.NumberColumn(format="R$ %.2f"),
+            "Anuidade Tabela": st.column_config.NumberColumn(format="R$ %.2f"),
+            "Condição à vista 7% até 30/09/2025": st.column_config.NumberColumn(format="R$ %.2f"),
+        },
+    )
+
+    # Botão para baixar CSV
+    csv_bytes = df.to_csv(index=False).encode("utf-8")
+    st.download_button(
+        "Baixar tabela (CSV)",
+        data=csv_bytes,
+        file_name="valores_2026.csv",
+        mime="text/csv",
+        key="baixar_valores_2026"
+    )
