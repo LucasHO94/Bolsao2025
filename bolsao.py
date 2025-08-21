@@ -1,11 +1,15 @@
 # -*- coding: utf-8 -*-
 """
-Gerador_Carta_Bolsa.py (v8.7 - Correção de SyntaxError)
+Gerador_Carta_Bolsa.py (v8.8 - Correção da Aba Valores)
 -------------------------------------------------
 Aplicação Streamlit que gera cartas, gerencia negociações e ativações de bolsão,
 utilizando WeasyPrint para PDF e Pandas para manipulação de dados.
 
 # Histórico de alterações
+# v8.8 - 21/08/2025:
+# - Corrigido o problema da aba "Valores" que aparecia em branco. Adicionada
+#   uma verificação para garantir que a tabela seja exibida apenas se houver
+#   colunas selecionadas.
 # v8.7 - 21/08/2025:
 # - Corrigido um SyntaxError causado por uma linha de texto inválida no final
 #   do arquivo.
@@ -839,6 +843,10 @@ with aba_valores:
         key="col_selector"
     )
 
+    if not selected_columns:
+        st.warning("Por favor, selecione ao menos uma coluna para exibir a tabela.")
+        st.stop()
+
     df_display = df_filtrado[selected_columns]
 
     # Tabela com formatação numérica (sem converter para string)
@@ -855,14 +863,4 @@ with aba_valores:
             "Anuidade Tabela": st.column_config.NumberColumn(format="R$ %.2f"),
             "Condição à vista 7% até 30/09/2025": st.column_config.NumberColumn(format="R$ %.2f"),
         },
-    )
-
-    # Botão para baixar CSV
-    csv_bytes = df_display.to_csv(index=False).encode("utf-8")
-    st.download_button(
-        "Baixar tabela (CSV)",
-        data=csv_bytes,
-        file_name="valores_2026.csv",
-        mime="text/csv",
-        key="baixar_valores_2026"
     )
