@@ -1,25 +1,25 @@
 # -*- coding: utf-8 -*-
 """
-Gerador_Carta_Bolsa.py (v8.8 - Correção da Aba Valores)
+Gerador_Carta_Bolsa.py (v8.9 - Correção Final da Aba Valores)
 -------------------------------------------------
 Aplicação Streamlit que gera cartas, gerencia negociações e ativações de bolsão,
 utilizando WeasyPrint para PDF e Pandas para manipulação de dados.
 
 # Histórico de alterações
+# v8.9 - 21/08/2025:
+# - Refatorada a lógica de exibição na aba "Valores" para garantir que a
+#   tabela ou uma mensagem de aviso seja sempre renderizada, corrigindo o
+#   problema da tela em branco.
 # v8.8 - 21/08/2025:
 # - Corrigido o problema da aba "Valores" que aparecia em branco. Adicionada
 #   uma verificação para garantir que a tabela seja exibida apenas se houver
 #   colunas selecionadas.
 # v8.7 - 21/08/2025:
-# - Corrigido um SyntaxError causado por uma linha de texto inválida no final
-#   do arquivo.
+# - Corrigido um SyntaxError.
 # v8.6 - 21/08/2025:
-# - Corrigido o erro "unexpected keyword argument 'value_render_option'" na
-#   chamada da API do Google Sheets (values_batch_get), ajustando a passagem
-#   de parâmetros.
+# - Corrigido o erro "unexpected keyword argument 'value_render_option'".
 # v8.5 - 21/08/2025:
-# - Otimizada a aba "Formulário Básico" para reduzir drasticamente as leituras
-#   da API do Google Sheets, resolvendo o erro 429 (Too Many Requests).
+# - Otimizada a aba "Formulário Básico" para reduzir as leituras da API.
 # v8.4 - 21/08/2025:
 # - Ajustado o padrão de exibição de colunas na aba "Valores".
 # v8.3 - 21/08/2025:
@@ -843,24 +843,33 @@ with aba_valores:
         key="col_selector"
     )
 
-    if not selected_columns:
+    if selected_columns:
+        df_display = df_filtrado[selected_columns]
+
+        # Tabela com formatação numérica (sem converter para string)
+        st.dataframe(
+            df_display,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "Anuidade 25": st.column_config.NumberColumn(format="R$ %.2f"),
+                "% Reajuste 2026": st.column_config.NumberColumn(format="%.2f%%"),
+                "1ª Cota": st.column_config.NumberColumn(format="R$ %.2f"),
+                "Quantidade demais parcelas": st.column_config.NumberColumn(format="%d"),
+                "Mensalidade Tabela": st.column_config.NumberColumn(format="R$ %.2f"),
+                "Anuidade Tabela": st.column_config.NumberColumn(format="R$ %.2f"),
+                "Condição à vista 7% até 30/09/2025": st.column_config.NumberColumn(format="R$ %.2f"),
+            },
+        )
+
+        # Botão para baixar CSV
+        csv_bytes = df_display.to_csv(index=False).encode("utf-8")
+        st.download_button(
+            "Baixar tabela (CSV)",
+            data=csv_bytes,
+            file_name="valores_2026.csv",
+            mime="text/csv",
+            key="baixar_valores_2026"
+        )
+    else:
         st.warning("Por favor, selecione ao menos uma coluna para exibir a tabela.")
-        st.stop()
-
-    df_display = df_filtrado[selected_columns]
-
-    # Tabela com formatação numérica (sem converter para string)
-    st.dataframe(
-        df_display,
-        use_container_width=True,
-        hide_index=True,
-        column_config={
-            "Anuidade 25": st.column_config.NumberColumn(format="R$ %.2f"),
-            "% Reajuste 2026": st.column_config.NumberColumn(format="%.2f%%"),
-            "1ª Cota": st.column_config.NumberColumn(format="R$ %.2f"),
-            "Quantidade demais parcelas": st.column_config.NumberColumn(format="%d"),
-            "Mensalidade Tabela": st.column_config.NumberColumn(format="R$ %.2f"),
-            "Anuidade Tabela": st.column_config.NumberColumn(format="R$ %.2f"),
-            "Condição à vista 7% até 30/09/2025": st.column_config.NumberColumn(format="R$ %.2f"),
-        },
-    )
