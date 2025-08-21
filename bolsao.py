@@ -1,11 +1,14 @@
 # -*- coding: utf-8 -*-
 """
-Gerador_Carta_Bolsa.py (v8.2 - Nova Aba de Valores)
+Gerador_Carta_Bolsa.py (v8.3 - Seletor de Colunas)
 -------------------------------------------------
 Aplicação Streamlit que gera cartas, gerencia negociações e ativações de bolsão,
 utilizando WeasyPrint para PDF e Pandas para manipulação de dados.
 
 # Histórico de alterações
+# v8.3 - 21/08/2025:
+# - Adicionado um seletor de colunas (st.multiselect) na aba "Valores" para
+#   permitir ao usuário escolher quais colunas exibir na tabela.
 # v8.2 - 21/08/2025:
 # - Removida a aba "Ativação do Bolsão".
 # - Adicionada a nova aba "Valores" com uma tabela de consulta estática
@@ -730,11 +733,24 @@ with aba_valores:
     cursos = ["Todos"] + sorted(df["Curso"].unique().tolist())
     curso_sel = st.selectbox("Filtrar por curso", cursos, index=0, key="valores_filtro_curso")
     if curso_sel != "Todos":
-        df = df[df["Curso"] == curso_sel].reset_index(drop=True)
+        df_filtrado = df[df["Curso"] == curso_sel].reset_index(drop=True)
+    else:
+        df_filtrado = df
+
+    # NOVO: Seletor de colunas
+    all_columns = df.columns.tolist()
+    selected_columns = st.multiselect(
+        "Selecione as colunas para exibir",
+        options=all_columns,
+        default=all_columns,
+        key="col_selector"
+    )
+
+    df_display = df_filtrado[selected_columns]
 
     # Tabela com formatação numérica (sem converter para string)
     st.dataframe(
-        df,
+        df_display,
         use_container_width=True,
         hide_index=True,
         column_config={
@@ -747,4 +763,3 @@ with aba_valores:
             "Condição à vista 7% até 30/09/2025": st.column_config.NumberColumn(format="R$ %.2f"),
         },
     )
-
