@@ -748,12 +748,3 @@ with aba_valores:
         },
     )
 
-    # Botão para baixar CSV
-    csv_bytes = df.to_csv(index=False).encode("utf-8")
-    st.download_button(
-        "Baixar tabela (CSV)",
-        data=csv_bytes,
-        file_name="valores_2026.csv",
-        mime="text/csv",
-        key="baixar_valores_2026"
-    )
