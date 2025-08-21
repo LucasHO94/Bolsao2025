@@ -1,11 +1,14 @@
 # -*- coding: utf-8 -*-
 """
-Gerador_Carta_Bolsa.py (v8.6 - Correção de API do Sheets)
+Gerador_Carta_Bolsa.py (v8.7 - Correção de SyntaxError)
 -------------------------------------------------
 Aplicação Streamlit que gera cartas, gerencia negociações e ativações de bolsão,
 utilizando WeasyPrint para PDF e Pandas para manipulação de dados.
 
 # Histórico de alterações
+# v8.7 - 21/08/2025:
+# - Corrigido um SyntaxError causado por uma linha de texto inválida no final
+#   do arquivo.
 # v8.6 - 21/08/2025:
 # - Corrigido o erro "unexpected keyword argument 'value_render_option'" na
 #   chamada da API do Google Sheets (values_batch_get), ajustando a passagem
@@ -13,8 +16,6 @@ utilizando WeasyPrint para PDF e Pandas para manipulação de dados.
 # v8.5 - 21/08/2025:
 # - Otimizada a aba "Formulário Básico" para reduzir drasticamente as leituras
 #   da API do Google Sheets, resolvendo o erro 429 (Too Many Requests).
-# - A aba agora carrega um "snapshot" dos dados em cache e realiza os filtros
-#   em memória.
 # v8.4 - 21/08/2025:
 # - Ajustado o padrão de exibição de colunas na aba "Valores".
 # v8.3 - 21/08/2025:
@@ -865,4 +866,3 @@ with aba_valores:
         mime="text/csv",
         key="baixar_valores_2026"
     )
-" and the query is "Ocorreu um erro ao carregar o formulário: Spreadsheet.values_batch_get() got an unexpected keyword argument 'value_render_option
