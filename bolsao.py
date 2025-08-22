@@ -752,7 +752,7 @@ with aba_valores:
         ("PV",   "Pré-Vestibular",        1128.38, 1128.38),
     ]
 
-    df = pd.DataFrame(linhas, columns=["Curso", "Série", "PrimeiraCota", "12 parcelas de"])
+    df = pd.DataFrame(linhas, columns=["Curso", "Série", "Primeira Cota", "12 parcelas de"])
 
     # Filtro por Curso (não bloqueante)
     cursos = ["Todos"] + sorted(df["Curso"].unique().tolist())
@@ -768,3 +768,4 @@ with aba_valores:
             "12 parcelas de": st.column_config.NumberColumn(format="R$ %.2f"),
         },
     )
+
