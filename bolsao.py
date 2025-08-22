@@ -1,19 +1,18 @@
 # -*- coding: utf-8 -*-
 """
-Gerador_Carta_Bolsa.py (v9.0 - Fix Valores sempre renderiza)
+Gerador_Carta_Bolsa.py (v9.1 - Telefone com máscara no Formulário)
 -------------------------------------------------
 Aplicação Streamlit que gera cartas, gerencia negociações e ativações de bolsão,
 utilizando WeasyPrint para PDF e Pandas para manipulação de dados.
 
 # Histórico de alterações
+# v9.1 - 21/08/2025:
+# - Adicionado campo "Telefone" ao Formulário Básico, com máscara (##) #####-####.
+# - Leitura/escrita no campo "Telefone" da planilha 'Resultados_Bolsao'.
 # v9.0 - 21/08/2025:
-# - Removidos todos os st.stop() da aba "Formulário básico" e reestruturado o fluxo
-#   com guardas não bloqueantes para impedir que a execução da app seja interrompida.
-#   Resultado: a aba "Valores" passa a renderizar 100% das vezes.
+# - Removidos st.stop() da aba "Formulário básico" para garantir render da aba "Valores".
 # v8.9 - 21/08/2025:
-# - Refatorada a lógica de exibição na aba "Valores" para garantir que a
-#   tabela ou uma mensagem de aviso seja sempre renderizada, corrigindo o
-#   problema da tela em branco.
+# - Refatorada a exibição da aba "Valores".
 """
 import io
 import re
@@ -295,6 +294,30 @@ def parse_brl_to_float(x) -> float:
         return float(s)
     except Exception:
         return 0.0
+
+# ---- Máscara de telefone ----------------------------------------------------
+def format_phone_mask(raw: str) -> str:
+    """Formata em (##) #####-#### (ou (##) ####-#### para 10 dígitos) conforme quantidade de dígitos."""
+    if raw is None:
+        return ""
+    digits = re.sub(r"\D", "", str(raw))
+    digits = digits[:11]  # limita a 11 dígitos
+    if len(digits) >= 11:
+        return f"({digits[:2]}) {digits[2:7]}-{digits[7:11]}"
+    elif len(digits) == 10:
+        return f"({digits[:2]}) {digits[2:6]}-{digits[6:10]}"
+    elif len(digits) > 6:
+        # máscara parcial enquanto digita
+        return f"({digits[:2]}) {digits[2:7]}-{digits[7:]}"
+    elif len(digits) > 2:
+        return f"({digits[:2]}) {digits[2:]}"
+    elif len(digits) > 0:
+        return f"({digits}"
+    return ""
+
+def enforce_phone_mask(key: str):
+    """Callback do Streamlit para aplicar a máscara no session_state[key]."""
+    st.session_state[key] = format_phone_mask(st.session_state.get(key, ""))
 
 def gera_pdf_html(ctx: dict) -> bytes:
     base_dir = Path(__file__).parent
@@ -582,10 +605,11 @@ with aba_formulario:
                 COL_MENOR_FALLBACK = "Valor Limite (PIA)"
                 menor_colname = COL_MENOR if COL_MENOR in hmap else (COL_MENOR_FALLBACK if COL_MENOR_FALLBACK in hmap else None)
 
+                # >>> INCLUIR TELEFONE NO SNAPSHOT <<<
                 base_cols = [
                     "REGISTRO_ID", "Nome do Aluno", "Unidade", "Bolsão",
                     "% Bolsa", "Valor da Mensalidade com Bolsa",
-                    "Escola de Origem", "Valor Negociado",
+                    "Escola de Origem", "Valor Negociado", "Telefone",
                     "Aluno Matriculou?", "Observações (Form)", "Data/Hora"
                 ]
                 if menor_colname:
@@ -658,6 +682,21 @@ with aba_formulario:
 
                                     escola_origem = st.text_input("Escola de Origem", get_val("Escola de Origem"))
 
+                                    # >>> TELEFONE COM MÁSCARA <<<
+                                    phone_initial = format_phone_mask(get_val("Telefone"))
+                                    # Se mudou o registro, sincroniza o valor inicial no estado
+                                    if st.session_state.get("telefone_form_reg_id") != reg_id:
+                                        st.session_state["telefone_form"] = phone_initial
+                                        st.session_state["telefone_form_reg_id"] = reg_id
+                                    telefone_masked = st.text_input(
+                                        "Telefone",
+                                        key="telefone_form",
+                                        placeholder="(##) #####-####",
+                                        on_change=enforce_phone_mask,
+                                        args=("telefone_form",),
+                                        help="Formato sugerido: (21) 98765-4321"
+                                    )
+
                                     valor_neg_ini = parse_brl_to_float(get_val("Valor Negociado"))
                                     valor_neg_num = st.number_input(
                                         "Valor negociado (R$)", min_value=0.0, step=10.0,
@@ -685,6 +724,7 @@ with aba_formulario:
                                     if st.button("Salvar Formulário"):
                                         updates_dict = {
                                             "Escola de Origem": escola_origem,
+                                            "Telefone": st.session_state.get("telefone_form", ""),
                                             "Valor Negociado": format_currency(valor_neg_num),
                                             "Aluno Matriculou?": aluno_matriculou,
                                             "Observações (Form)": obs_form,
@@ -705,6 +745,7 @@ with aba_formulario:
                                             # Atualiza snapshot local
                                             row.update({
                                                 "Escola de Origem": updates_dict.get("Escola de Origem", row.get("Escola de Origem")),
+                                                "Telefone": updates_dict.get("Telefone", row.get("Telefone")),
                                                 "Valor Negociado": updates_dict.get("Valor Negociado", row.get("Valor Negociado")),
                                                 "Aluno Matriculou?": updates_dict.get("Aluno Matriculou?", row.get("Aluno Matriculou?")),
                                                 "Observações (Form)": updates_dict.get("Observações (Form)", row.get("Observações (Form)")),
@@ -720,7 +761,7 @@ with aba_formulario:
 with aba_valores:
     st.subheader("Valores 2026 (Tabela)")
 
-    # Somente as 4 colunas necessárias: Curso, Série, PrimeiraCota, 12 parcelas de
+    # Somente as 4 colunas necessárias: Curso, Série, Primeira Cota, 12 parcelas de
     linhas = [
         ("EFI",  "1º Ano",                2031.85, 2031.85),
         ("EFI",  "2º Ano",                2031.85, 2031.85),
@@ -768,6 +809,3 @@ with aba_valores:
             "12 parcelas de": st.column_config.NumberColumn(format="R$ %.2f"),
         },
     )
-
-
-
