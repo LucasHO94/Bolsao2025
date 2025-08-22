@@ -764,8 +764,9 @@ with aba_valores:
         use_container_width=True,
         hide_index=True,
         column_config={
-            "PrimeiraCota": st.column_config.NumberColumn(format="R$ %.2f"),
+            "Primeira Cota": st.column_config.NumberColumn(format="R$ %.2f"),
             "12 parcelas de": st.column_config.NumberColumn(format="R$ %.2f"),
         },
     )
+
 
