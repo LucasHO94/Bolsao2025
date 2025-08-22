@@ -1,18 +1,21 @@
 # -*- coding: utf-8 -*-
 """
-Gerador_Carta_Bolsa.py (v9.1 - Telefone com máscara no Formulário)
+Gerador_Carta_Bolsa.py (v9.2 - EF1 regra de bolsa + Responsável Financeiro)
 -------------------------------------------------
 Aplicação Streamlit que gera cartas, gerencia negociações e ativações de bolsão,
 utilizando WeasyPrint para PDF e Pandas para manipulação de dados.
 
 # Histórico de alterações
+# v9.2 - 21/08/2025:
+# - Regra especial de bolsa para EF1 (1º ao 5º Ano): 10 questões (5+5) e tabela:
+#     1–3: 30%, 4–5: 50%, 6–8: 60%, 9–10: 65%, 0: 0%.
+# - Inputs de acertos passam a limitar 0–5 quando a série for "1º ao 5º Ano".
+# - Formulário básico: adicionado "Responsável Financeiro" antes de "Telefone"
+#   (leitura/escrita na planilha, sem quebrar se a coluna não existir).
 # v9.1 - 21/08/2025:
-# - Adicionado campo "Telefone" ao Formulário Básico, com máscara (##) #####-####.
-# - Leitura/escrita no campo "Telefone" da planilha 'Resultados_Bolsao'.
+# - Telefone no Formulário com máscara.
 # v9.0 - 21/08/2025:
 # - Removidos st.stop() da aba "Formulário básico" para garantir render da aba "Valores".
-# v8.9 - 21/08/2025:
-# - Refatorada a exibição da aba "Valores".
 """
 import io
 import re
@@ -270,7 +273,24 @@ def precos_2026(serie_modalidade: str) -> dict:
     anuidade = round(primeira_cota + 12 * parcela_mensal, 2)
     return {"primeira_cota": primeira_cota, "parcela_mensal": parcela_mensal, "anuidade": anuidade}
 
-def calcula_bolsa(acertos: int) -> float:
+def calcula_bolsa(acertos: int, serie_modalidade: str | None = None) -> float:
+    """
+    Regra padrão (24 questões) via BOLSA_MAP.
+    Regra especial EF1 (1º ao 5º Ano): 10 questões total; 0→0%, 1–3:30%, 4–5:50%, 6–8:60%, 9–10:65%.
+    """
+    if serie_modalidade == "1º ao 5º Ano":
+        a = max(0, min(acertos, 10))
+        if a == 0:
+            return 0.0
+        if 1 <= a <= 3:
+            return 0.30
+        if 4 <= a <= 5:
+            return 0.50
+        if 6 <= a <= 8:
+            return 0.60
+        # 9–10 (e qualquer valor acima, já truncado) → 65%
+        return 0.65
+    # Demais séries (24 questões)
     ac = max(0, min(acertos, 24))
     return BOLSA_MAP.get(ac, 0.30)
 
@@ -307,7 +327,6 @@ def format_phone_mask(raw: str) -> str:
     elif len(digits) == 10:
         return f"({digits[:2]}) {digits[2:6]}-{digits[6:10]}"
     elif len(digits) > 6:
-        # máscara parcial enquanto digita
         return f"({digits[:2]}) {digits[2:7]}-{digits[7:]}"
     elif len(digits) > 2:
         return f"({digits[:2]}) {digits[2:]}"
@@ -450,13 +469,15 @@ with aba_carta:
             on_change=update_serie_from_turma
         )
     with c2:
-        ac_mat = st.number_input("Acertos - Matemática", 0, 12, 0, key="c_mat")
-        ac_port = st.number_input("Acertos - Português", 0, 12, 0, key="c_port")
+        # >>> Limites de acertos dinâmicos: EF1 (1º ao 5º Ano) usa 0–5 por matéria, demais 0–12
+        max_por_materia = 5 if st.session_state.c_serie == "1º ao 5º Ano" else 12
+        ac_mat = st.number_input("Acertos - Matemática", 0, max_por_materia, 0, key="c_mat")
+        ac_port = st.number_input("Acertos - Português", 0, max_por_materia, 0, key="c_port")
 
     aluno = st.text_input("Nome completo do candidato", nome_aluno_pre, key="c_nome")
 
     total = ac_mat + ac_port
-    pct = calcula_bolsa(total)
+    pct = calcula_bolsa(total, st.session_state.c_serie)
     st.markdown(f"### ➔ Bolsa obtida: *{pct*100:.0f}%* ({total} acertos)")
 
     st.text_input("Série / Modalidade (para cálculo)", key="c_serie", disabled=True)
@@ -605,11 +626,12 @@ with aba_formulario:
                 COL_MENOR_FALLBACK = "Valor Limite (PIA)"
                 menor_colname = COL_MENOR if COL_MENOR in hmap else (COL_MENOR_FALLBACK if COL_MENOR_FALLBACK in hmap else None)
 
-                # >>> INCLUIR TELEFONE NO SNAPSHOT <<<
+                # >>> INCLUIR RESPONSÁVEL FINANCEIRO (antes do Telefone) E TELEFONE NO SNAPSHOT <<<
                 base_cols = [
                     "REGISTRO_ID", "Nome do Aluno", "Unidade", "Bolsão",
                     "% Bolsa", "Valor da Mensalidade com Bolsa",
-                    "Escola de Origem", "Valor Negociado", "Telefone",
+                    "Escola de Origem", "Valor Negociado",
+                    "Responsável Financeiro", "Telefone",
                     "Aluno Matriculou?", "Observações (Form)", "Data/Hora"
                 ]
                 if menor_colname:
@@ -682,6 +704,9 @@ with aba_formulario:
 
                                     escola_origem = st.text_input("Escola de Origem", get_val("Escola de Origem"))
 
+                                    # >>> RESPONSÁVEL FINANCEIRO (antes do Telefone)
+                                    responsavel_fin = st.text_input("Responsável Financeiro", get_val("Responsável Financeiro"))
+
                                     # >>> TELEFONE COM MÁSCARA <<<
                                     phone_initial = format_phone_mask(get_val("Telefone"))
                                     # Se mudou o registro, sincroniza o valor inicial no estado
@@ -724,6 +749,7 @@ with aba_formulario:
                                     if st.button("Salvar Formulário"):
                                         updates_dict = {
                                             "Escola de Origem": escola_origem,
+                                            "Responsável Financeiro": responsavel_fin,
                                             "Telefone": st.session_state.get("telefone_form", ""),
                                             "Valor Negociado": format_currency(valor_neg_num),
                                             "Aluno Matriculou?": aluno_matriculou,
@@ -745,6 +771,7 @@ with aba_formulario:
                                             # Atualiza snapshot local
                                             row.update({
                                                 "Escola de Origem": updates_dict.get("Escola de Origem", row.get("Escola de Origem")),
+                                                "Responsável Financeiro": updates_dict.get("Responsável Financeiro", row.get("Responsável Financeiro")),
                                                 "Telefone": updates_dict.get("Telefone", row.get("Telefone")),
                                                 "Valor Negociado": updates_dict.get("Valor Negociado", row.get("Valor Negociado")),
                                                 "Aluno Matriculou?": updates_dict.get("Aluno Matriculou?", row.get("Aluno Matriculou?")),
