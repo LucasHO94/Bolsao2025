@@ -784,92 +784,56 @@ with aba_formulario:
 with aba_valores:
     st.subheader("Valores 2026 (Tabela)")
 
-    # Dados base (numéricos) — iguais aos da sua tabela
+    # Só as 4 colunas necessárias
+    # (Curso, Série, PrimeiraCota, MensalidadeTabela)
     linhas = [
-        # Curso, Série, Anuidade25, Reajuste2026(%), PrimeiraCota, QtdDemais, MensalidadeTabela, AnuidadeTabela, AVista7
-        ("EFI",  "1º Ano",               24013.00, 10.00, 2031.85, 12, 2031.85, 26414.00, 24565.02),
-        ("EFI",  "2º Ano",               24013.00, 10.00, 2031.85, 12, 2031.85, 26414.00, 24565.02),
-        ("EFI",  "3º Ano",               24013.00, 10.00, 2031.85, 12, 2031.85, 26414.00, 24565.02),
-        ("EFI",  "4º Ano",               24013.00, 10.00, 2031.85, 12, 2031.85, 26414.00, 24565.02),
-        ("EFI",  "5º Ano",               24013.00, 10.00, 2031.85, 12, 2031.85, 26414.00, 24565.02),
+        ("EFI",  "1º Ano",                2031.85, 2031.85),
+        ("EFI",  "2º Ano",                2031.85, 2031.85),
+        ("EFI",  "3º Ano",                2031.85, 2031.85),
+        ("EFI",  "4º Ano",                2031.85, 2031.85),
+        ("EFI",  "5º Ano",                2031.85, 2031.85),
 
-        ("EFII", "6º Ano",               28247.00, 10.00, 2390.15, 12, 2390.15, 31072.00, 28896.96),
-        ("EFII", "7º Ano",               28247.00, 10.00, 2390.15, 12, 2390.15, 31072.00, 28896.96),
-        ("EFII", "8º Ano",               28247.00, 10.00, 2390.15, 12, 2390.15, 31072.00, 28896.96),
-        ("EFII", "9º Ano - Militar",     30762.00, 10.00, 2602.92, 12, 2602.92, 33838.00, 31469.34),
-        ("EFII", "9º Ano - Vestibular",  30762.00, 10.00, 2602.92, 12, 2602.92, 33838.00, 31469.34),
+        ("EFII", "6º Ano",                2390.15, 2390.15),
+        ("EFII", "7º Ano",                2390.15, 2390.15),
+        ("EFII", "8º Ano",                2390.15, 2390.15),
+        ("EFII", "9º Ano - Militar",      2602.92, 2602.92),
+        ("EFII", "9º Ano - Vestibular",   2602.92, 2602.92),
 
-        ("EM",   "1ª Série - Militar",   33036.00, 10.00, 2795.38, 12, 2795.38, 36340.00, 33796.20),
-        ("EM",   "1ª Série - Vestibular",33036.00, 10.00, 2795.38, 12, 2795.38, 36340.00, 33796.20),
-        ("EM",   "2ª Série - Militar",   33036.00, 10.00, 2795.38, 12, 2795.38, 36340.00, 33796.20),
-        ("EM",   "2ª Série - Vestibular",33036.00, 10.00, 2795.38, 12, 2795.38, 36340.00, 33796.20),
-        ("EM",   "3ª série - Medicina",  33164.00, 10.00, 2806.15, 12, 2806.15, 36480.00, 33926.40),
-        ("EM",   "3ª Série - Militar",   33164.00, 10.00, 2806.15, 12, 2806.15, 36480.00, 33926.40),
-        ("EM",   "3ª Série - Vestibular",33164.00, 10.00, 2806.15, 12, 2806.15, 36480.00, 33926.40),
+        ("EM",   "1ª Série - Militar",    2795.38, 2795.38),
+        ("EM",   "1ª Série - Vestibular", 2795.38, 2795.38),
+        ("EM",   "2ª Série - Militar",    2795.38, 2795.38),
+        ("EM",   "2ª Série - Vestibular", 2795.38, 2795.38),
+        ("EM",   "3ª série - Medicina",   2806.15, 2806.15),
+        ("EM",   "3ª Série - Militar",    2806.15, 2806.15),
+        ("EM",   "3ª Série - Vestibular", 2806.15, 2806.15),
 
-        ("PM",   "AFA/EN/EFOMM",         13335.00, 10.00, 1128.38, 12, 1128.38, 14669.00, 13642.17),
-        ("PM",   "CN/EPCAr",              7985.00, 10.00,  675.69, 12,  675.69,  8784.00,  8169.12),
-        ("PM",   "ESA",                    6437.00, 10.00,  544.69, 12,  544.69,  7081.00,  6585.33),
-        ("PM",   "EsPCEx",                13335.00, 10.00, 1128.38, 12, 1128.38, 14669.00, 13642.17),
-        ("PM",   "IME/ITA",               13335.00, 10.00, 1128.38, 12, 1128.38, 14669.00, 13642.17),
+        ("PM",   "AFA/EN/EFOMM",          1128.38, 1128.38),
+        ("PM",   "CN/EPCAr",               675.69,  675.69),
+        ("PM",   "ESA",                    544.69,  544.69),
+        ("PM",   "EsPCEx",                1128.38, 1128.38),
+        ("PM",   "IME/ITA",               1128.38, 1128.38),
 
-        ("PV",   "Medicina",              13335.00, 10.00, 1128.38, 12, 1128.38, 14669.00, 13642.17),
-        ("PV",   "Pré-Vestibular",        13335.00, 10.00, 1128.38, 12, 1128.38, 14669.00, 13642.17),
+        ("PV",   "Medicina",              1128.38, 1128.38),
+        ("PV",   "Pré-Vestibular",        1128.38, 1128.38),
     ]
 
-    df = pd.DataFrame(linhas, columns=[
-        "Curso", "Série", "Anuidade 25", "% Reajuste 2026", "1ª Cota",
-        "Quantidade demais parcelas", "Mensalidade Tabela", "Anuidade Tabela",
-        "Condição à vista 7% até 30/09/2025"
-    ])
+    df = pd.DataFrame(linhas, columns=["Curso", "Série", "PrimeiraCota", "MensalidadeTabela"])
 
-    # (Opcional) Filtro simples por Curso
+    # Filtro por Curso
     cursos = ["Todos"] + sorted(df["Curso"].unique().tolist())
     curso_sel = st.selectbox("Filtrar por curso", cursos, index=0, key="valores_filtro_curso")
-    if curso_sel != "Todos":
-        df_filtrado = df[df["Curso"] == curso_sel].reset_index(drop=True)
-    else:
-        df_filtrado = df
+    df_filtrado = df if curso_sel == "Todos" else df[df["Curso"] == curso_sel].reset_index(drop=True)
 
-    # NOVO: Seletor de colunas com padrão modificado
-    all_columns = df.columns.tolist()
-    cols_to_exclude = ["Anuidade 25", "% Reajuste 2026", "Quantidade demais parcelas"]
-    default_cols = [col for col in all_columns if col not in cols_to_exclude]
-    
-    selected_columns = st.multiselect(
-        "Selecione as colunas para exibir",
-        options=all_columns,
-        default=default_cols,
-        key="col_selector"
+    # Renomeia apenas a coluna de mensalidade para o rótulo desejado
+    df_display = df_filtrado.rename(columns={"MensalidadeTabela": "12 parcelas de"})
+
+    st.dataframe(
+        df_display,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "PrimeiraCota": st.column_config.NumberColumn(format="R$ %.2f"),
+            "12 parcelas de": st.column_config.NumberColumn(format="R$ %.2f"),
+        },
     )
 
-    if selected_columns:
-        df_display = df_filtrado[selected_columns]
-
-        # Tabela com formatação numérica (sem converter para string)
-        st.dataframe(
-            df_display,
-            use_container_width=True,
-            hide_index=True,
-            column_config={
-                "Anuidade 25": st.column_config.NumberColumn(format="R$ %.2f"),
-                "% Reajuste 2026": st.column_config.NumberColumn(format="%.2f%%"),
-                "1ª Cota": st.column_config.NumberColumn(format="R$ %.2f"),
-                "Quantidade demais parcelas": st.column_config.NumberColumn(format="%d"),
-                "Mensalidade Tabela": st.column_config.NumberColumn(format="R$ %.2f"),
-                "Anuidade Tabela": st.column_config.NumberColumn(format="R$ %.2f"),
-                "Condição à vista 7% até 30/09/2025": st.column_config.NumberColumn(format="R$ %.2f"),
-            },
-        )
-
-        # Botão para baixar CSV
-        csv_bytes = df_display.to_csv(index=False).encode("utf-8")
-        st.download_button(
-            "Baixar tabela (CSV)",
-            data=csv_bytes,
-            file_name="valores_2026.csv",
-            mime="text/csv",
-            key="baixar_valores_2026"
-        )
-    else:
-        st.warning("Por favor, selecione ao menos uma coluna para exibir a tabela.")
