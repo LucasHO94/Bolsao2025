@@ -578,7 +578,7 @@ with aba_formulario:
                 hmap = header_map("Resultados_Bolsao")
 
                 # novo nome e fallback
-                COL_MENOR = "Menor valor negociável"
+                COL_MENOR = "Expectativa de mensalidade"
                 COL_MENOR_FALLBACK = "Valor Limite (PIA)"
                 menor_colname = COL_MENOR if COL_MENOR in hmap else (COL_MENOR_FALLBACK if COL_MENOR_FALLBACK in hmap else None)
 
@@ -676,7 +676,7 @@ with aba_formulario:
                                     if menor_colname:
                                         menor_val_ini = parse_brl_to_float(get_val(menor_colname))
                                         menor_val_num = st.number_input(
-                                            "Menor valor negociável (R$)", min_value=0.0, step=10.0,
+                                            "Expectativa de mensalidade (R$)", min_value=0.0, step=10.0,
                                             value=menor_val_ini, format="%.2f", key="menor_val_num"
                                         )
 
@@ -768,5 +768,6 @@ with aba_valores:
             "12 parcelas de": st.column_config.NumberColumn(format="R$ %.2f"),
         },
     )
+
 
 
