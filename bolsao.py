@@ -365,7 +365,7 @@ def get_hubspot_data_for_activation():
             return pd.DataFrame()
 
         hmap_h = header_map("Hubspot")
-        cols_needed = ["Unidade", "Nome do candidato", "Contato ID", "Status do Contato",
+        cols_needed = ["Unidade", "Nome do Candidato", "Contato ID", "Status do Contato",
                        "Contato Realizado", "Observações", "Celular Tratado", "Nome",
                        "E-mail", "Turma de Interesse - Geral", "Fonte original"]
         missing_cols = [c for c in cols_needed if c not in hmap_h]
@@ -432,13 +432,13 @@ with aba_carta:
                     "Selecione a Unidade do candidato:", UNIDADES_LIMPAS, key="unidade_selecionada_carta"
                 )
                 df_filtrado = df_hubspot_all[df_hubspot_all['Unidade'] == UNIDADES_MAP[unidade_selecionada]]
-                nomes_candidatos = ["Selecione um candidato"] + sorted(df_filtrado['Nome do candidato'].tolist())
+                nomes_candidatos = ["Selecione um candidato"] + sorted(df_filtrado['Nome do Candidato'].tolist())
                 selecao_candidato = st.selectbox(
                     "Selecione o candidato da lista:", nomes_candidatos, key="selecao_candidato"
                 )
                 if selecao_candidato != "Selecione um candidato":
-                    candidato_selecionado = df_filtrado[df_filtrado['Nome do candidato'] == selecao_candidato].iloc[0]
-                    nome_aluno_pre = candidato_selecionado.get('Nome do candidato', '')
+                    candidato_selecionado = df_filtrado[df_filtrado['Nome do Candidato'] == selecao_candidato].iloc[0]
+                    nome_aluno_pre = candidato_selecionado.get('Nome do Candidato', '')
                     serie_modalidade_pre = candidato_selecionado.get('Turma de Interesse - Geral', '1ª e 2ª Série EM Vestibular')
                     unidade_aluno_pre = unidade_selecionada
                     turma_interesse_carregada = SERIE_TO_TURMA_MAP.get(serie_modalidade_pre, opcoes_turma_interesse[0])
@@ -836,3 +836,4 @@ with aba_valores:
             "12 parcelas de": st.column_config.NumberColumn(format="R$ %.2f"),
         },
     )
+
