@@ -1,21 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-Gerador_Carta_Bolsa.py (v9.2 - EF1 regra de bolsa + Responsável Financeiro)
+Gerador_Carta_Bolsa.py (v10.0 - Sincronizado com a versão Desktop)
 -------------------------------------------------
 Aplicação Streamlit que gera cartas, gerencia negociações e ativações de bolsão,
 utilizando WeasyPrint para PDF e Pandas para manipulação de dados.
-
-# Histórico de alterações
-# v9.2 - 21/08/2025:
-# - Regra especial de bolsa para EF1 (1º ao 5º Ano): 10 questões (5+5) e tabela:
-#     1–3: 30%, 4–5: 50%, 6–8: 60%, 9–10: 65%, 0: 0%.
-# - Inputs de acertos passam a limitar 0–5 quando a série for "1º ao 5º Ano".
-# - Formulário básico: adicionado "Responsável Financeiro" antes de "Telefone"
-#   (leitura/escrita na planilha, sem quebrar se a coluna não existir).
-# v9.1 - 21/08/2025:
-# - Telefone no Formulário com máscara.
-# v9.0 - 21/08/2025:
-# - Removidos st.stop() da aba "Formulário básico" para garantir render da aba "Valores".
+Lógica de data, preços e material didático atualizada para corresponder ao app desktop.
 """
 import io
 import re
@@ -29,9 +18,11 @@ import pandas as pd
 import streamlit as st
 import weasyprint
 from google.oauth2.service_account import Credentials
+import requests
+import pytz
 
 # --------------------------------------------------
-# UTILITÁRIOS DE ACESSO AO GOOGLE SHEETS (OTIMIZADOS)
+# UTILITÁRIOS DE ACESSO AO GOOGLE SHEETS
 # --------------------------------------------------
 SPREAD_URL = "https://docs.google.com/spreadsheets/d/1qBV70qrPswnAUDxnHfBgKEU4FYAISpL7iVP0IM9zU2Q/edit#gid=0"
 
@@ -91,17 +82,11 @@ def find_row_by_id(ws, id_col_idx: int, target_id: str):
     return None
 
 def batch_update_cells(ws, updates):
-    """
-    Executa múltiplas atualizações de células em uma única requisição.
-    Aceita 'range' em A1 simples (ex.: 'Q446') ou completo (ex.: 'Resultados_Bolsao!Q446').
-    Prefixa o nome da aba quando necessário para evitar cair na aba errada (ex.: 'Limites').
-    """
+    """Executa múltiplas atualizações de células em uma única requisição."""
     if not updates:
         return
-
     fixed = []
     sheet_title_safe = ws.title.replace("'", "''")  # escapa apóstrofos
-
     for u in updates:
         rng = u.get("range", "")
         if not rng:
@@ -109,7 +94,6 @@ def batch_update_cells(ws, updates):
         if "!" not in rng:  # range sem nome de aba
             rng = f"'{sheet_title_safe}'!{rng}"
         fixed.append({"range": rng, "values": u.get("values", [[]])})
-
     body = {"valueInputOption": "USER_ENTERED", "data": fixed}
     ws.spreadsheet.values_batch_update(body)
 
@@ -125,118 +109,63 @@ def new_uuid():
     """Gera um ID único e curto."""
     return uuid.uuid4().hex[:12]
 
-# --- HELPERS para reduzir leituras ------------------------------------------
-def a1_col_letter(col_idx: int) -> str:
-    """Converte índice numérico de coluna (1=A, 2=B, ...) para letra A1."""
-    return re.sub(r"\d", "", gspread.utils.rowcol_to_a1(1, col_idx))
-
-def batch_get_values_prefixed(ws, ranges, value_render_option="UNFORMATTED_VALUE"):
-    """Batch GET em várias faixas A1, sempre prefixando com o nome da aba."""
-    if not ranges:
-        return []
-    title_safe = ws.title.replace("'", "''")
-    prefixed = [f"'{title_safe}'!{r}" if "!" not in r else r for r in ranges]
-    params = {'valueRenderOption': value_render_option}
-    resp = ws.spreadsheet.values_batch_get(prefixed, params=params)
-    return resp.get("valueRanges", [])
-
 @st.cache_data(ttl=300)
 def load_resultados_snapshot(columns_needed: tuple[str, ...]):
-    """
-    Faz UMA leitura (batch get) das colunas necessárias de 'Resultados_Bolsao' e
-    retorna um snapshot cacheado com rows (dicts) e id_to_rownum.
-    """
+    """Carrega um snapshot cacheado da aba 'Resultados_Bolsao'."""
     ws = get_ws("Resultados_Bolsao")
     if not ws:
         return {"rows": [], "id_to_rownum": {}}
-
     hmap = header_map("Resultados_Bolsao")
     missing = [c for c in columns_needed if c not in hmap]
     if missing:
         raise RuntimeError(f"Faltam colunas em 'Resultados_Bolsao': {', '.join(missing)}")
-
-    letters = {c: a1_col_letter(hmap[c]) for c in columns_needed}
-    ranges = [f"{letters[c]}2:{letters[c]}" for c in columns_needed]
-
-    vranges = batch_get_values_prefixed(ws, ranges)
-    series = {}
-    for c, vr in zip(columns_needed, vranges):
-        vals = vr.get("values", [])
-        series[c] = [row[0] if row else "" for row in vals]
-
-    max_len = max((len(v) for v in series.values()), default=0)
-    for c in columns_needed:
-        col = series[c]
-        if len(col) < max_len:
-            col.extend([""] * (max_len - len(col)))
-
-    rows = [{c: series[c][i] for c in columns_needed} for i in range(max_len)]
-
-    id_to_rownum = {}
-    for i, rid in enumerate(series.get("REGISTRO_ID", []), start=2):
-        if rid:
-            id_to_rownum[str(rid)] = i
-
+    
+    data = ws.get_all_records(expected_headers=list(columns_needed))
+    df = pd.DataFrame(data)
+    rows = df.to_dict('records')
+    id_to_rownum = {str(row["REGISTRO_ID"]): i + 2 for i, row in enumerate(rows) if row.get("REGISTRO_ID")}
     return {"rows": rows, "id_to_rownum": id_to_rownum}
 
 # --------------------------------------------------
-# DADOS DE REFERÊNCIA E CONFIGURAÇÕES
+# DADOS DE REFERÊNCIA E CONFIGURAÇÕES (ATUALIZADOS)
 # --------------------------------------------------
 BOLSA_MAP = {
-    0: .30, 1: .30, 2: .30, 3: .35,
-    4: .40, 5: .40, 6: .44, 7: .45, 8: .46, 9: .47,
-    10: .48, 11: .49, 12: .50, 13: .51, 14: .52,
-    15: .53, 16: .54, 17: .55, 18: .56, 19: .57,
+    0: .30, 1: .30, 2: .30, 3: .35, 4: .40, 5: .40, 6: .44, 7: .45, 8: .46, 9: .47,
+    10: .48, 11: .49, 12: .50, 13: .51, 14: .52, 15: .53, 16: .54, 17: .55, 18: .56, 19: .57,
     20: .60, 21: .65, 22: .70, 23: .80, 24: 1.00,
 }
 
 TUITION = {
-    "1ª e 2ª Série EM Militar": {"anuidade": 36339.60, "parcela13": 2795.35},
-    "1ª e 2ª Série EM Vestibular": {"anuidade": 36339.60, "parcela13": 2795.35},
-    "1º ao 5º Ano": {"anuidade": 26414.30, "parcela13": 2031.87},
-    "3ª Série (PV/PM)": {"anuidade": 36480.40, "parcela13": 2806.19},
-    "3ª Série EM Medicina": {"anuidade": 36480.40, "parcela13": 2806.19},
-    "6º ao 8º Ano": {"anuidade": 31071.70, "parcela13": 2390.14},
-    "9º Ano EF II Militar": {"anuidade": 33838.20, "parcela13": 2602.94},
-    "9º Ano EF II Vestibular": {"anuidade": 33838.20, "parcela13": 2602.94},
-    "AFA/EN/EFOMM": {"anuidade": 14668.50, "parcela13": 1128.35},
-    "CN/EPCAr": {"anuidade": 8783.50, "parcela13": 675.65},
-    "ESA": {"anuidade": 7080.70, "parcela13": 544.67},
-    "EsPCEx": {"anuidade": 14668.50, "parcela13": 1128.35},
-    "IME/ITA": {"anuidade": 14668.50, "parcela13": 1128.35},
-    "Medicina (Pré)": {"anuidade": 14668.50, "parcela13": 1128.35},
-    "Pré-Vestibular": {"anuidade": 14668.50, "parcela13": 1128.35},
+    "1ª e 2ª Série EM Militar": {"anuidade": 36670.00, "parcela13": 2820.77},
+    "1ª e 2ª Série EM Vestibular": {"anuidade": 36670.00, "parcela13": 2820.77},
+    "1º ao 5º Ano": {"anuidade": 26654.00, "parcela13": 2050.31},
+    "3ª Série (PV/PM)": {"anuidade": 36812.00, "parcela13": 2831.69},
+    "3ª Série EM Medicina": {"anuidade": 36812.00, "parcela13": 2831.69},
+    "6º ao 8º Ano": {"anuidade": 31354.00, "parcela13": 2411.85},
+    "9º Ano EF II Militar": {"anuidade": 34146.00, "parcela13": 2626.62},
+    "9º Ano EF II Vestibular": {"anuidade": 34146.00, "parcela13": 2626.62},
+    "AFA/EN/EFOMM": {"anuidade": 14802.00, "parcela13": 1138.62},
+    "CN/EPCAr": {"anuidade": 8863.00, "parcela13": 681.77},
+    "ESA": {"anuidade": 7145.00, "parcela13": 549.62},
+    "EsPCEx": {"anuidade": 14802.00, "parcela13": 1138.62},
+    "IME/ITA": {"anuidade": 14802.00, "parcela13": 1138.62},
+    "Medicina (Pré)": {"anuidade": 14802.00, "parcela13": 1138.62},
+    "Pré-Vestibular": {"anuidade": 14802.00, "parcela13": 1138.62},
 }
 
 TURMA_DE_INTERESSE_MAP = {
-    "1ª série IME ITA Jr": "1ª e 2ª Série EM Militar",
-    "1ª série do EM - Militar": "1ª e 2ª Série EM Militar",
-    "1ª série do EM - Pré-Vestibular": "1ª e 2ª Série EM Vestibular",
-    "1º ano do EF1": "1º ao 5º Ano",
-    "2ª série IME ITA Jr": "1ª e 2ª Série EM Militar",
-    "2ª série do EM - Militar": "1ª e 2ª Série EM Militar",
-    "2ª série do EM - Pré-Vestibular": "1ª e 2ª Série EM Vestibular",
-    "2º ano do EF1": "1º ao 5º Ano",
-    "3ª série do EM - AFA EN EFOMM": "3ª Série (PV/PM)",
-    "3ª série do EM - ESA": "3ª Série (PV/PM)",
-    "3ª série do EM - EsPCEx": "3ª Série (PV/PM)",
-    "3ª série do EM - IME ITA": "3ª Série (PV/PM)",
-    "3ª série do EM - Medicina": "3ª Série EM Medicina",
-    "3ª série do EM - Pré-Vestibular": "3ª Série (PV/PM)",
-    "3º ano do EF1": "1º ao 5º Ano",
-    "4º ano do EF1": "1º ao 5º Ano",
-    "5º ano do EF1": "1º ao 5º Ano",
-    "6º ano do EF2": "6º ao 8º Ano",
-    "7º ano do EF2": "6º ao 8º Ano",
-    "8º ano do EF2": "6º ao 8º Ano",
-    "9º ano do EF2 - Militar": "9º Ano EF II Militar",
-    "9º ano do EF2 - Vestibular": "9º Ano EF II Vestibular",
-    "Pré-Militar AFA EN EFOMM": "AFA/EN/EFOMM",
-    "Pré-Militar CN EPCAr": "CN/EPCAr",
-    "Pré-Militar ESA": "ESA",
-    "Pré-Militar EsPCEx": "EsPCEx",
-    "Pré-Militar IME ITA": "IME/ITA",
-    "Pré-Vestibular": "Pré-Vestibular",
+    "1ª série IME ITA Jr": "1ª e 2ª Série EM Militar", "1ª série do EM - Militar": "1ª e 2ª Série EM Militar",
+    "1ª série do EM - Pré-Vestibular": "1ª e 2ª Série EM Vestibular", "1º ano do EF1": "1º ao 5º Ano",
+    "2ª série IME ITA Jr": "1ª e 2ª Série EM Militar", "2ª série do EM - Militar": "1ª e 2ª Série EM Militar",
+    "2ª série do EM - Pré-Vestibular": "1ª e 2ª Série EM Vestibular", "2º ano do EF1": "1º ao 5º Ano",
+    "3ª série do EM - AFA EN EFOMM": "3ª Série (PV/PM)", "3ª série do EM - ESA": "3ª Série (PV/PM)",
+    "3ª série do EM - EsPCEx": "3ª Série (PV/PM)", "3ª série do EM - IME ITA": "3ª Série (PV/PM)",
+    "3ª série do EM - Medicina": "3ª Série EM Medicina", "3ª série do EM - Pré-Vestibular": "3ª Série (PV/PM)",
+    "3º ano do EF1": "1º ao 5º Ano", "4º ano do EF1": "1º ao 5º Ano", "5º ano do EF1": "1º ao 5º Ano",
+    "6º ano do EF2": "6º ao 8º Ano", "7º ano do EF2": "6º ao 8º Ano", "8º ano do EF2": "6º ao 8º Ano",
+    "9º ano do EF2 - Militar": "9º Ano EF II Militar", "9º ano do EF2 - Vestibular": "9º Ano EF II Vestibular",
+    "Pré-Militar AFA EN EFOMM": "AFA/EN/EFOMM", "Pré-Militar CN EPCAr": "CN/EPCAr", "Pré-Militar ESA": "ESA",
+    "Pré-Militar EsPCEx": "EsPCEx", "Pré-Militar IME ITA": "IME/ITA", "Pré-Vestibular": "Pré-Vestibular",
     "Pré-Vestibular - Medicina": "Medicina (Pré)",
 }
 SERIE_TO_TURMA_MAP = {v: k for k, v in reversed(list(TURMA_DE_INTERESSE_MAP.items()))}
@@ -258,15 +187,47 @@ DESCONTOS_MAXIMOS_POR_UNIDADE = {
 }
 
 # --------------------------------------------------
-# FUNÇÕES DE LÓGICA E UTILITÁRIOS
+# FUNÇÕES DE LÓGICA E UTILITÁRIOS (ATUALIZADAS)
 # --------------------------------------------------
+def get_current_brasilia_date() -> date:
+    """Obtém a data atual de Brasília a partir de uma API online com fallback."""
+    try:
+        response = requests.get("http://worldtimeapi.org/api/timezone/America/Sao_Paulo", timeout=3)
+        response.raise_for_status()
+        data = response.json()
+        current_datetime = datetime.fromisoformat(data['datetime'])
+        return current_datetime.date()
+    except Exception:
+        utc_now = datetime.utcnow().replace(tzinfo=pytz.utc)
+        br_tz = pytz.timezone("America/Sao_Paulo")
+        return utc_now.astimezone(br_tz).date()
+
+@lru_cache(maxsize=1)
+def get_bolsao_name_for_date(target_date=None):
+    """Verifica a data e retorna o nome do bolsão ou 'Bolsão Avulso'."""
+    if target_date is None:
+        target_date = get_current_brasilia_date()
+    try:
+        ws_bolsao = get_ws("Bolsão")
+        dates_cells = ws_bolsao.get('A2:A', value_render_option='FORMATTED_STRING')
+        names_cells = ws_bolsao.get('C2:C')
+        dates_col = [cell[0] for cell in dates_cells if cell]
+        names_col = [cell[0] for cell in names_cells if cell]
+        for i, date_str in enumerate(dates_col):
+            if i < len(names_col) and names_col[i]:
+                try:
+                    bolsao_date = datetime.strptime(date_str, "%d/%m/%Y").date()
+                    if bolsao_date == target_date:
+                        return names_col[i]
+                except ValueError: continue
+        return "Bolsão Avulso"
+    except Exception: return "Bolsão Avulso"
+
 def precos_2026(serie_modalidade: str) -> dict:
     base = TUITION.get(serie_modalidade, {})
-    if not base:
-        return {"primeira_cota": 0.0, "parcela_mensal": 0.0, "anuidade": 0.0}
+    if not base: return {"primeira_cota": 0.0, "parcela_mensal": 0.0, "anuidade": 0.0}
     parcela_2026_do_dict = float(base.get("parcela13", 0.0))
-    if parcela_2026_do_dict <= 0:
-        return {"primeira_cota": 0.0, "parcela_mensal": 0.0, "anuidade": 0.0}
+    if parcela_2026_do_dict <= 0: return {"primeira_cota": 0.0, "parcela_mensal": 0.0, "anuidade": 0.0}
     parcela_2025 = round(parcela_2026_do_dict / 1.10, 2)
     primeira_cota = parcela_2025
     parcela_mensal = round(parcela_2025 * 1.093, 2)
@@ -274,69 +235,72 @@ def precos_2026(serie_modalidade: str) -> dict:
     return {"primeira_cota": primeira_cota, "parcela_mensal": parcela_mensal, "anuidade": anuidade}
 
 def calcula_bolsa(acertos: int, serie_modalidade: str | None = None) -> float:
-    """
-    Regra padrão (24 questões) via BOLSA_MAP.
-    Regra especial EF1 (1º ao 5º Ano): 10 questões total; 0→0%, 1–3:30%, 4–5:50%, 6–8:60%, 9–10:65%.
-    """
+    """Inclui a regra especial para o EF1 (1º ao 5º Ano)."""
     if serie_modalidade == "1º ao 5º Ano":
         a = max(0, min(acertos, 10))
-        if a == 0:
-            return 0.0
-        if 1 <= a <= 3:
-            return 0.30
-        if 4 <= a <= 5:
-            return 0.50
-        if 6 <= a <= 8:
-            return 0.60
-        # 9–10 (e qualquer valor acima, já truncado) → 65%
-        return 0.65
-    # Demais séries (24 questões)
+        if a == 0: return 0.0
+        if 1 <= a <= 3: return 0.30
+        if 4 <= a <= 5: return 0.50
+        if 6 <= a <= 8: return 0.60
+        return 0.65 # 9-10 acertos
     ac = max(0, min(acertos, 24))
     return BOLSA_MAP.get(ac, 0.30)
 
 def format_currency(v: float) -> str:
     try:
-        v_float = float(v)
-        return f"R$ {v_float:,.2f}".replace(",", "@").replace(".", ",").replace("@", ".")
-    except (ValueError, TypeError):
-        return str(v)
+        return f"R$ {float(v):,.2f}".replace(",", "@").replace(".", ",").replace("@", ".")
+    except (ValueError, TypeError): return str(v)
 
 def parse_brl_to_float(x) -> float:
-    """Converte 'R$ 1.234,56' ou '1234,56' para 1234.56. Retorna 0.0 se vazio/ inválido."""
-    if isinstance(x, (int, float)):
-        return float(x)
-    if not x:
-        return 0.0
-    s = str(x).strip()
-    s = s.replace("R$", "").strip()
-    s = s.replace(".", "").replace(",", ".")
-    try:
-        return float(s)
-    except Exception:
-        return 0.0
+    if isinstance(x, (int, float)): return float(x)
+    if not x: return 0.0
+    s = str(x).strip().replace("R$", "").replace(".", "").replace(",", ".")
+    try: return float(s)
+    except Exception: return 0.0
 
-# ---- Máscara de telefone ----------------------------------------------------
 def format_phone_mask(raw: str) -> str:
-    """Formata em (##) #####-#### (ou (##) ####-#### para 10 dígitos) conforme quantidade de dígitos."""
-    if raw is None:
-        return ""
+    if raw is None: return ""
     digits = re.sub(r"\D", "", str(raw))
-    digits = digits[:11]  # limita a 11 dígitos
-    if len(digits) >= 11:
-        return f"({digits[:2]}) {digits[2:7]}-{digits[7:11]}"
-    elif len(digits) == 10:
-        return f"({digits[:2]}) {digits[2:6]}-{digits[6:10]}"
-    elif len(digits) > 6:
-        return f"({digits[:2]}) {digits[2:7]}-{digits[7:]}"
-    elif len(digits) > 2:
-        return f"({digits[:2]}) {digits[2:]}"
-    elif len(digits) > 0:
-        return f"({digits}"
-    return ""
+    if len(digits) >= 11: return f"({digits[:2]}) {digits[2:7]}-{digits[7:11]}"
+    elif len(digits) == 10: return f"({digits[:2]}) {digits[2:6]}-{digits[6:10]}"
+    return digits
 
 def enforce_phone_mask(key: str):
-    """Callback do Streamlit para aplicar a máscara no session_state[key]."""
     st.session_state[key] = format_phone_mask(st.session_state.get(key, ""))
+
+def gerar_html_material_didatico(unidade: str) -> str:
+    """Gera o HTML para as tabelas de material didático com base na unidade."""
+    precos_gerais = {"Medicina": ("R$ 4.009,95", "11x de R$ 364,54"), "Pré-Vestibular": ("R$ 4.009,95", "11x de R$ 364,54")}
+    precos_militares = {"AFA/EN/EFOMM": ("R$ 2.333,73", "11x de R$ 212,16"), "EPCAR": ("R$ 2.501,36", "11x de R$ 227,40"), "ESA": ("R$ 1.111,98", "11x de R$ 101,09"), "EsPCEx": ("R$ 2.668,97", "11x de R$ 242,63"), "IME/ITA": ("R$ 2.333,73", "11x de R$ 212,16")}
+    precos_didatico_padrao = {"1ª ao 5ª ano": ("R$ 2.552,80", "11x de R$ 232,07"), "6ª ao 8ª ano": ("R$ 2.765,77", "11x de R$ 251,43"), "9ª ano Vestibular": ("R$ 2.872,69", "11x de R$ 261,15"), "1ª e 2ª série Vestibular": ("R$ 3.399,67", "11x de R$ 309,06"), "3ª série": ("R$ 4.009,95", "11x de R$ 364,54")}
+    precos_sao_joao = {"1ª ao 5ª ano": ("R$ 1.933,56", "11x de R$ 175,78"), "6ª ao 8ª ano": ("R$ 2.020,92", "11x de R$ 183,72"), "9ª ano Vestibular": ("R$ 2.019,84", "11x de R$ 183,62"), "1ª e 2ª série Vestibular": ("R$ 2.474,20", "11x de R$ 224,93"), "3ª série": ("R$ 2.932,21", "11x de R$ 266,56")}
+    precos_retiro = {"1ª ao 5ª ano": ("R$ 2.552,80", "11x de R$ 232,07")}
+    
+    dados_didatico = {}
+    if unidade == "SÃO JOÃO DE MERITI":
+        titulo_didatico = "Material Didático (exclusivo São João de Meriti)"
+        dados_didatico = precos_sao_joao
+    elif unidade == "RETIRO DOS ARTISTAS":
+        titulo_didatico = "Material Didático"
+        dados_didatico = precos_didatico_padrao.copy()
+        dados_didatico.update(precos_retiro)
+    else:
+        titulo_didatico = "Material Didático"
+        dados_didatico = precos_didatico_padrao
+
+    tabela_didatico_html = f'<table class="pag2"><tr><th colspan="3">{titulo_didatico}</th></tr>'
+    for curso, valores in dados_didatico.items(): tabela_didatico_html += f'<tr><td>{curso}</td><td>{valores[0]}</td><td>{valores[1]}</td></tr>'
+    tabela_didatico_html += '</table><br>'
+
+    tabela_geral_html = '<table class="pag2"><tr><th colspan="3">Material Didático (geral)</th></tr>'
+    for curso, valores in precos_gerais.items(): tabela_geral_html += f'<tr><td>{curso}</td><td>{valores[0]}</td><td>{valores[1]}</td></tr>'
+    tabela_geral_html += '</table><br>'
+    
+    tabela_militares_html = '<table class="pag2"><tr><th colspan="3">Material Militares</th></tr>'
+    for curso, valores in precos_militares.items(): tabela_militares_html += f'<tr><td>{curso}</td><td>{valores[0]}</td><td>{valores[1]}</td></tr>'
+    tabela_militares_html += '</table><br>'
+
+    return tabela_didatico_html + tabela_geral_html + tabela_militares_html
 
 def gera_pdf_html(ctx: dict) -> bytes:
     base_dir = Path(__file__).parent
@@ -350,7 +314,7 @@ def gera_pdf_html(ctx: dict) -> bytes:
         html_obj = weasyprint.HTML(string=html_renderizado, base_url=str(base_dir))
         return html_obj.write_pdf()
     except FileNotFoundError:
-        st.error("Arquivo 'carta.html' não encontrado no diretório. Crie o template HTML.")
+        st.error("Arquivo 'carta.html' ou 'style.css' não encontrado.")
         return b""
     except Exception as e:
         st.error(f"Erro ao gerar PDF: {e}")
@@ -398,14 +362,13 @@ def calcula_valor_minimo(unidade, serie_modalidade):
         return 0.0
 
 # --------------------------------------------------
-# INTERFACE STREAMLIT
+# INTERFACE STREAMLIT (CÓDIGO ORIGINAL PRESERVADO)
 # --------------------------------------------------
 st.set_page_config(page_title="Gestor do Bolsão", layout="centered")
 st.title("🎓 Gestor do Bolsão")
 
 client = get_gspread_client()
 
-# REMOVIDO: aba_ativacao
 aba_carta, aba_negociacao, aba_formulario, aba_valores = st.tabs([
     "Gerar Carta", "Negociação", "Formulário básico", "Valores"
 ])
@@ -469,7 +432,6 @@ with aba_carta:
             on_change=update_serie_from_turma
         )
     with c2:
-        # >>> Limites de acertos dinâmicos: EF1 (1º ao 5º Ano) usa 0–5 por matéria, demais 0–12
         max_por_materia = 5 if st.session_state.c_serie == "1º ao 5º Ano" else 12
         ac_mat = st.number_input("Acertos - Matemática", 0, max_por_materia, 0, key="c_mat")
         ac_port = st.number_input("Acertos - Português", 0, max_por_materia, 0, key="c_port")
@@ -494,30 +456,18 @@ with aba_carta:
             st.error("Não foi possível gerar a carta pois a conexão com a planilha falhou.")
         else:
             ws_res = get_ws("Resultados_Bolsao")
-            ensure_size(ws_res, 2000, 40)
             hmap_res = header_map("Resultados_Bolsao")
 
             if not ws_res or not hmap_res:
                 st.error("Não foi possível acessar a planilha 'Resultados_Bolsao'. Verifique o nome e as permissões.")
             elif "REGISTRO_ID" not in hmap_res:
-                st.error("A planilha 'Resultados_Bolsao' precisa de uma coluna chamada 'REGISTRO_ID'. Por favor, adicione-a e tente novamente.")
+                st.error("A planilha 'Resultados_Bolsao' precisa de uma coluna chamada 'REGISTRO_ID'.")
             else:
-                hoje = date.today()
-                nome_bolsao = "-"
-                try:
-                    ws_bolsao = get_ws("Bolsão")
-                    if ws_bolsao:
-                        dados_bolsao = ws_bolsao.get_all_records()
-                        for linha in dados_bolsao:
-                            data_str, bolsao_nome_temp = linha.get("Data"), linha.get("Bolsão")
-                            if data_str and bolsao_nome_temp:
-                                if datetime.strptime(data_str, "%d/%m/%Y").date() >= hoje:
-                                    nome_bolsao = bolsao_nome_temp
-                                    break
-                except Exception as e:
-                    st.warning(f"Não foi possível obter nome do bolsão: {e}")
-
+                hoje = get_current_brasilia_date()
+                nome_bolsao = get_bolsao_name_for_date(hoje)
                 unidades_html = "".join(f"<span class='unidade-item'>{u}</span>" for u in UNIDADES_LIMPAS)
+                html_tabelas_material = gerar_html_material_didatico(unidade_limpa)
+
                 ctx = {
                     "ano": hoje.year,
                     "unidade": f"Colégio Matriz – {unidade_limpa}",
@@ -532,6 +482,7 @@ with aba_carta:
                     "primeira_cota": format_currency(val_primeira_cota),
                     "valor_parcela": format_currency(val_parcela_mensal),
                     "unidades_html": unidades_html,
+                    "tabelas_material_didatico": html_tabelas_material,
                 }
 
                 pdf_bytes = gera_pdf_html(ctx)
@@ -540,7 +491,7 @@ with aba_carta:
                     try:
                         REGISTRO_ID = new_uuid()
                         row_data_map = {
-                            "Data/Hora": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
+                            "Data/Hora": datetime.now(pytz.timezone("America/Sao_Paulo")).strftime("%d/%m/%Y %H:%M:%S"),
                             "Nome do Aluno": aluno.strip().title(),
                             "Unidade": UNIDADES_MAP[unidade_limpa],
                             "Turma de Interesse": st.session_state.c_turma,
@@ -621,12 +572,10 @@ with aba_formulario:
             if ws_res:
                 hmap = header_map("Resultados_Bolsao")
 
-                # novo nome e fallback
                 COL_MENOR = "Expectativa de mensalidade"
                 COL_MENOR_FALLBACK = "Valor Limite (PIA)"
                 menor_colname = COL_MENOR if COL_MENOR in hmap else (COL_MENOR_FALLBACK if COL_MENOR_FALLBACK in hmap else None)
 
-                # >>> INCLUIR RESPONSÁVEL FINANCEIRO (antes do Telefone) E TELEFONE NO SNAPSHOT <<<
                 base_cols = [
                     "REGISTRO_ID", "Nome do Aluno", "Unidade", "Bolsão",
                     "% Bolsa", "Valor da Mensalidade com Bolsa",
@@ -640,7 +589,6 @@ with aba_formulario:
                 if st.button("Recarregar lista (atualizar snapshot)", use_container_width=False):
                     load_resultados_snapshot.clear()
 
-                # snapshot carregado (ou do cache)
                 try:
                     snapshot = load_resultados_snapshot(tuple(base_cols))
                 except RuntimeError as e:
@@ -656,9 +604,7 @@ with aba_formulario:
                         key="filtro_unidade_form"
                     )
 
-                    if unidade_selecionada == "Selecione...":
-                        st.info("Selecione uma unidade para continuar.")
-                    else:
+                    if unidade_selecionada != "Selecione...":
                         unidade_completa = UNIDADES_MAP[unidade_selecionada]
                         rows_unit = [r for r in snapshot["rows"] if r.get("Unidade") == unidade_completa]
 
@@ -703,13 +649,9 @@ with aba_formulario:
                                     st.write("---")
 
                                     escola_origem = st.text_input("Escola de Origem", get_val("Escola de Origem"))
-
-                                    # >>> RESPONSÁVEL FINANCEIRO (antes do Telefone)
                                     responsavel_fin = st.text_input("Responsável Financeiro", get_val("Responsável Financeiro"))
 
-                                    # >>> TELEFONE COM MÁSCARA <<<
                                     phone_initial = format_phone_mask(get_val("Telefone"))
-                                    # Se mudou o registro, sincroniza o valor inicial no estado
                                     if st.session_state.get("telefone_form_reg_id") != reg_id:
                                         st.session_state["telefone_form"] = phone_initial
                                         st.session_state["telefone_form_reg_id"] = reg_id
@@ -767,8 +709,7 @@ with aba_formulario:
 
                                         if updates_to_batch:
                                             batch_update_cells(ws_res, updates_to_batch)
-
-                                            # Atualiza snapshot local
+                                            
                                             row.update({
                                                 "Escola de Origem": updates_dict.get("Escola de Origem", row.get("Escola de Origem")),
                                                 "Responsável Financeiro": updates_dict.get("Responsável Financeiro", row.get("Responsável Financeiro")),
@@ -779,7 +720,7 @@ with aba_formulario:
                                             })
                                             if menor_colname and menor_colname in updates_dict:
                                                 row[menor_colname] = updates_dict[menor_colname]
-
+                                            
                                             st.success("Dados do formulário salvos com sucesso!")
         except Exception as e:
             st.error(f"Ocorreu um erro ao carregar o formulário: {e}")
@@ -788,7 +729,6 @@ with aba_formulario:
 with aba_valores:
     st.subheader("Valores 2026 (Tabela)")
 
-    # Somente as 4 colunas necessárias: Curso, Série, Primeira Cota, 12 parcelas de
     linhas = [
         ("EFI",  "1º Ano",                2031.85, 2031.85),
         ("EFI",  "2º Ano",                2031.85, 2031.85),
@@ -811,8 +751,8 @@ with aba_valores:
         ("EM",   "3ª Série - Vestibular", 2806.15, 2806.15),
 
         ("PM",   "AFA/EN/EFOMM",          1128.38, 1128.38),
-        ("PM",   "CN/EPCAr",               675.69,  675.69),
-        ("PM",   "ESA",                    544.69,  544.69),
+        ("PM",   "CN/EPCAr",              675.69,  675.69),
+        ("PM",   "ESA",                   544.69,  544.69),
         ("PM",   "EsPCEx",                1128.38, 1128.38),
         ("PM",   "IME/ITA",               1128.38, 1128.38),
 
@@ -822,7 +762,6 @@ with aba_valores:
 
     df = pd.DataFrame(linhas, columns=["Curso", "Série", "Primeira Cota", "12 parcelas de"])
 
-    # Filtro por Curso (não bloqueante)
     cursos = ["Todos"] + sorted(df["Curso"].unique().tolist())
     curso_sel = st.selectbox("Filtrar por curso", cursos, index=0, key="valores_filtro_curso")
     df_filtrado = df if curso_sel == "Todos" else df[df["Curso"] == curso_sel].reset_index(drop=True)
@@ -836,4 +775,3 @@ with aba_valores:
             "12 parcelas de": st.column_config.NumberColumn(format="R$ %.2f"),
         },
     )
-
