@@ -1,5 +1,7 @@
 streamlit
 weasyprint
 gspread
-oauth2client
+pandas
+requests
+pytz
 Pillow
