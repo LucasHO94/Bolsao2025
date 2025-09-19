@@ -796,7 +796,7 @@ with aba_valores:
     ]
 
     df = pd.DataFrame(linhas, columns=["Curso", "Série", "Primeira Cota", "12 parcelas de"])
-
+    
     cursos = ["Todos"] + sorted(df["Curso"].unique().tolist())
     curso_sel = st.selectbox("Filtrar por curso", cursos, index=0, key="valores_filtro_curso")
     df_filtrado = df if curso_sel == "Todos" else df[df["Curso"] == curso_sel].reset_index(drop=True)
@@ -810,7 +810,3 @@ with aba_valores:
             "12 parcelas de": st.column_config.NumberColumn(format="R$ %.2f"),
         },
     )
-
-
-
-
