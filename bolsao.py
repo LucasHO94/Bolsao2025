@@ -729,25 +729,35 @@ with aba_formulario:
 with aba_valores:
     st.subheader("Valores 2026 (Tabela)")
 
-        linhas = [
-            ("EFI",  "1º Ano", 2050.31, 2050.31), ("EFI",  "2º Ano", 2050.31, 2050.31),
-            ("EFI",  "3º Ano", 2050.31, 2050.31), ("EFI",  "4º Ano", 2050.31, 2050.31),
-            ("EFI",  "5º Ano", 2050.31, 2050.31), ("EFII", "6º Ano", 2411.85, 2411.85),
-            ("EFII", "7º Ano", 2411.85, 2411.85), ("EFII", "8º Ano", 2411.85, 2411.85),
-            ("EFII", "9º Ano - Militar",     2626.62, 2626.62),
-            ("EFII", "9º Ano - Vestibular", 2626.62, 2626.62),
-            ("EM",   "1ª Série - Militar",     2820.77, 2820.77),
-            ("EM",   "1ª Série - Vestibular", 2820.77, 2820.77),
-            ("EM",   "2ª Série - Militar",     2820.77, 2820.77),
-            ("EM",   "2ª Série - Vestibular", 2820.77, 2820.77),
-            ("EM",   "3ª série - Medicina",   2831.69, 2831.69),
-            ("EM",   "3ª Série - Militar",     2831.69, 2831.69),
-            ("EM",   "3ª Série - Vestibular", 2831.69, 2831.69),
-            ("PM",   "AFA/EN/EFOMM", 1138.62, 1138.62), ("PM",   "CN/EPCAr", 681.77,  681.77),
-            ("PM",   "ESA", 549.62,  549.62), ("PM",   "EsPCEx", 1138.62, 1138.62),
-            ("PM",   "IME/ITA", 1138.62, 1138.62), ("PV",   "Medicina", 1138.62, 1138.62),
-            ("PV",   "Pré-Vestibular", 1138.62, 1138.62),
-        ]
+    linhas = [
+        ("EFI",  "1º Ano", 2050.31, 2050.31), 
+        ("EFI",  "2º Ano", 2050.31, 2050.31),
+        ("EFI",  "3º Ano", 2050.31, 2050.31), 
+        ("EFI",  "4º Ano", 2050.31, 2050.31),
+        ("EFI",  "5º Ano", 2050.31, 2050.31), 
+        
+        ("EFII", "6º Ano", 2411.85, 2411.85),
+        ("EFII", "7º Ano", 2411.85, 2411.85), 
+        ("EFII", "8º Ano", 2411.85, 2411.85),
+        ("EFII", "9º Ano - Militar", 2626.62, 2626.62),
+        ("EFII", "9º Ano - Vestibular", 2626.62, 2626.62),
+        
+        ("EM",   "1ª Série - Militar",     2820.77, 2820.77),
+        ("EM",   "1ª Série - Vestibular", 2820.77, 2820.77),
+        ("EM",   "2ª Série - Militar",     2820.77, 2820.77),
+        ("EM",   "2ª Série - Vestibular", 2820.77, 2820.77),
+        ("EM",   "3ª série - Medicina",   2831.69, 2831.69),
+        ("EM",   "3ª Série - Militar",     2831.69, 2831.69),
+        ("EM",   "3ª Série - Vestibular", 2831.69, 2831.69),
+        
+        ("PM",   "AFA/EN/EFOMM", 1138.62, 1138.62), 
+        ("PM",   "CN/EPCAr", 681.77,  681.77),
+        ("PM",   "ESA", 549.62,  549.62), 
+        ("PM",   "EsPCEx", 1138.62, 1138.62),
+        ("PM",   "IME/ITA", 1138.62, 1138.62), 
+        ("PV",   "Medicina", 1138.62, 1138.62),
+        ("PV",   "Pré-Vestibular", 1138.62, 1138.62),
+    ]
 
     df = pd.DataFrame(linhas, columns=["Curso", "Série", "Primeira Cota", "12 parcelas de"])
 
@@ -764,4 +774,5 @@ with aba_valores:
             "12 parcelas de": st.column_config.NumberColumn(format="R$ %.2f"),
         },
     )
+
 
