@@ -21,7 +21,7 @@ import requests
 import pytz
 
 # --------------------------------------------------
-# UTILITÁRIOS DE ACESSO AO GOOGLE SHEETS
+# UTILITÁRIOS DE ACESSO AO GOOGLE SHEETS (OTIMIZADOS)
 # --------------------------------------------------
 SPREAD_URL = "https://docs.google.com/spreadsheets/d/1qBV70qrPswnAUDxnHfBgKEU4FYAISpL7iVP0IM9zU2Q/edit#gid=0"
 
@@ -81,11 +81,17 @@ def find_row_by_id(ws, id_col_idx: int, target_id: str):
     return None
 
 def batch_update_cells(ws, updates):
-    """Executa múltiplas atualizações de células em uma única requisição."""
+    """
+    Executa múltiplas atualizações de células em uma única requisição.
+    Aceita 'range' em A1 simples (ex.: 'Q446') ou completo (ex.: 'Resultados_Bolsao!Q446').
+    Prefixa o nome da aba quando necessário para evitar cair na aba errada (ex.: 'Limites').
+    """
     if not updates:
         return
+
     fixed = []
     sheet_title_safe = ws.title.replace("'", "''")  # escapa apóstrofos
+
     for u in updates:
         rng = u.get("range", "")
         if not rng:
@@ -93,6 +99,7 @@ def batch_update_cells(ws, updates):
         if "!" not in rng:  # range sem nome de aba
             rng = f"'{sheet_title_safe}'!{rng}"
         fixed.append({"range": rng, "values": u.get("values", [[]])})
+
     body = {"valueInputOption": "USER_ENTERED", "data": fixed}
     ws.spreadsheet.values_batch_update(body)
 
@@ -108,6 +115,7 @@ def new_uuid():
     """Gera um ID único e curto."""
     return uuid.uuid4().hex[:12]
 
+# --- HELPERS para reduzir leituras ------------------------------------------
 def a1_col_letter(col_idx: int) -> str:
     """Converte índice numérico de coluna (1=A, 2=B, ...) para letra A1."""
     return re.sub(r"\d", "", gspread.utils.rowcol_to_a1(1, col_idx))
@@ -242,7 +250,6 @@ DESCONTOS_MAXIMOS_POR_UNIDADE = {
 # --------------------------------------------------
 # FUNÇÕES DE LÓGICA E UTILITÁRIOS
 # --------------------------------------------------
-
 # --- FUNÇÃO CORRIGIDA ---
 def precos_2026(serie_modalidade: str) -> dict:
     """
@@ -257,11 +264,14 @@ def precos_2026(serie_modalidade: str) -> dict:
     valor_mensal = float(base.get("parcela13", 0.0))
     primeira_cota = valor_mensal # A primeira cota é igual à mensalidade base.
     
-    # Recalcula a anuidade com base nos valores corretos.
-    anuidade = primeira_cota + (12 * valor_mensal)
+    # Usa a anuidade do dicionário se existir, caso contrário, calcula.
+    anuidade_total = float(base.get("anuidade", primeira_cota + (12 * valor_mensal)))
     
-    return {"primeira_cota": primeira_cota, "parcela_mensal": valor_mensal, "anuidade": anuidade}
-
+    return {
+        "primeira_cota": primeira_cota, 
+        "parcela_mensal": valor_mensal, 
+        "anuidade": anuidade_total
+    }
 
 def calcula_bolsa(acertos: int, serie_modalidade: str | None = None) -> float:
     """
@@ -398,7 +408,6 @@ aba_carta, aba_negociacao, aba_formulario, aba_valores = st.tabs([
     "Gerar Carta", "Negociação", "Formulário básico", "Valores"
 ])
 
-# (Aqui começa o seu código original da interface, que não foi alterado)
 # --- ABA GERAR CARTA ---
 with aba_carta:
     st.subheader("Gerar Carta")
@@ -801,6 +810,7 @@ with aba_valores:
             "12 parcelas de": st.column_config.NumberColumn(format="R$ %.2f"),
         },
     )
+
 
 
 
