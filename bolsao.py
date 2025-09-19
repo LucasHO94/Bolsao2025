@@ -115,7 +115,6 @@ def new_uuid():
     """Gera um ID único e curto."""
     return uuid.uuid4().hex[:12]
 
-# --- HELPERS para reduzir leituras ------------------------------------------
 def a1_col_letter(col_idx: int) -> str:
     """Converte índice numérico de coluna (1=A, 2=B, ...) para letra A1."""
     return re.sub(r"\d", "", gspread.utils.rowcol_to_a1(1, col_idx))
@@ -170,32 +169,31 @@ def load_resultados_snapshot(columns_needed: tuple[str, ...]):
     return {"rows": rows, "id_to_rownum": id_to_rownum}
 
 # --------------------------------------------------
-# DADOS DE REFERÊNCIA E CONFIGURAÇÕES
+# DADOS DE REFERÊNCIA E CONFIGURAÇÕES (ATUALIZADOS)
 # --------------------------------------------------
 BOLSA_MAP = {
-    0: .30, 1: .30, 2: .30, 3: .35,
-    4: .40, 5: .40, 6: .44, 7: .45, 8: .46, 9: .47,
-    10: .48, 11: .49, 12: .50, 13: .51, 14: .52,
-    15: .53, 16: .54, 17: .55, 18: .56, 19: .57,
+    0: .30, 1: .30, 2: .30, 3: .35, 4: .40, 5: .40, 6: .44, 7: .45, 8: .46, 9: .47,
+    10: .48, 11: .49, 12: .50, 13: .51, 14: .52, 15: .53, 16: .54, 17: .55, 18: .56, 19: .57,
     20: .60, 21: .65, 22: .70, 23: .80, 24: 1.00,
 }
 
+# --- DICIONÁRIO TUITION ATUALIZADO ---
 TUITION = {
-    "1ª e 2ª Série EM Militar": {"anuidade": 36339.60, "parcela13": 2795.35},
-    "1ª e 2ª Série EM Vestibular": {"anuidade": 36339.60, "parcela13": 2795.35},
-    "1º ao 5º Ano": {"anuidade": 26414.30, "parcela13": 2031.87},
-    "3ª Série (PV/PM)": {"anuidade": 36480.40, "parcela13": 2806.19},
-    "3ª Série EM Medicina": {"anuidade": 36480.40, "parcela13": 2806.19},
-    "6º ao 8º Ano": {"anuidade": 31071.70, "parcela13": 2390.14},
-    "9º Ano EF II Militar": {"anuidade": 33838.20, "parcela13": 2602.94},
-    "9º Ano EF II Vestibular": {"anuidade": 33838.20, "parcela13": 2602.94},
-    "AFA/EN/EFOMM": {"anuidade": 14668.50, "parcela13": 1128.35},
-    "CN/EPCAr": {"anuidade": 8783.50, "parcela13": 675.65},
-    "ESA": {"anuidade": 7080.70, "parcela13": 544.67},
-    "EsPCEx": {"anuidade": 14668.50, "parcela13": 1128.35},
-    "IME/ITA": {"anuidade": 14668.50, "parcela13": 1128.35},
-    "Medicina (Pré)": {"anuidade": 14668.50, "parcela13": 1128.35},
-    "Pré-Vestibular": {"anuidade": 14668.50, "parcela13": 1128.35},
+    "1ª e 2ª Série EM Militar": {"anuidade": 36670.00, "parcela13": 2820.77},
+    "1ª e 2ª Série EM Vestibular": {"anuidade": 36670.00, "parcela13": 2820.77},
+    "1º ao 5º Ano": {"anuidade": 26654.00, "parcela13": 2050.31},
+    "3ª Série (PV/PM)": {"anuidade": 36812.00, "parcela13": 2831.69},
+    "3ª Série EM Medicina": {"anuidade": 36812.00, "parcela13": 2831.69},
+    "6º ao 8º Ano": {"anuidade": 31354.00, "parcela13": 2411.85},
+    "9º Ano EF II Militar": {"anuidade": 34146.00, "parcela13": 2626.62},
+    "9º Ano EF II Vestibular": {"anuidade": 34146.00, "parcela13": 2626.62},
+    "AFA/EN/EFOMM": {"anuidade": 14802.00, "parcela13": 1138.62},
+    "CN/EPCAr": {"anuidade": 8863.00, "parcela13": 681.77},
+    "ESA": {"anuidade": 7145.00, "parcela13": 549.62},
+    "EsPCEx": {"anuidade": 14802.00, "parcela13": 1138.62},
+    "IME/ITA": {"anuidade": 14802.00, "parcela13": 1138.62},
+    "Medicina (Pré)": {"anuidade": 14802.00, "parcela13": 1138.62},
+    "Pré-Vestibular": {"anuidade": 14802.00, "parcela13": 1138.62},
 }
 
 TURMA_DE_INTERESSE_MAP = {
@@ -248,24 +246,55 @@ DESCONTOS_MAXIMOS_POR_UNIDADE = {
 }
 
 # --------------------------------------------------
-# FUNÇÕES DE LÓGICA E UTILITÁRIOS
+# FUNÇÕES DE LÓGICA E UTILITÁRIOS (ATUALIZADAS)
 # --------------------------------------------------
+def get_current_brasilia_date() -> date:
+    """Obtém a data atual de Brasília a partir de uma API online com fallback."""
+    try:
+        response = requests.get("http://worldtimeapi.org/api/timezone/America/Sao_Paulo", timeout=3)
+        response.raise_for_status()
+        data = response.json()
+        current_datetime = datetime.fromisoformat(data['datetime'])
+        return current_datetime.date()
+    except Exception:
+        utc_now = datetime.utcnow().replace(tzinfo=pytz.utc)
+        br_tz = pytz.timezone("America/Sao_Paulo")
+        return utc_now.astimezone(br_tz).date()
+
+@lru_cache(maxsize=1)
+def get_bolsao_name_for_date(target_date=None):
+    """Verifica a data e retorna o nome do bolsão ou 'Bolsão Avulso'."""
+    if target_date is None:
+        target_date = get_current_brasilia_date()
+    try:
+        ws_bolsao = get_ws("Bolsão")
+        dates_cells = ws_bolsao.get('A2:A', value_render_option='FORMATTED_STRING')
+        names_cells = ws_bolsao.get('C2:C')
+        dates_col = [cell[0] for cell in dates_cells if cell]
+        names_col = [cell[0] for cell in names_cells if cell]
+        for i, date_str in enumerate(dates_col):
+            if i < len(names_col) and names_col[i]:
+                try:
+                    bolsao_date = datetime.strptime(date_str, "%d/%m/%Y").date()
+                    if bolsao_date == target_date:
+                        return names_col[i]
+                except ValueError: continue
+        return "Bolsão Avulso"
+    except Exception: return "Bolsão Avulso"
+
 # --- FUNÇÃO CORRIGIDA ---
 def precos_2026(serie_modalidade: str) -> dict:
     """
     Busca os preços corretos no dicionário TUITION.
-    A chave 'parcela13' é interpretada como a mensalidade base e a primeira cota.
+    A chave 'parcela13' é o valor da mensalidade e da primeira cota.
     """
     base = TUITION.get(serie_modalidade, {})
     if not base:
         return {"primeira_cota": 0.0, "parcela_mensal": 0.0, "anuidade": 0.0}
     
-    # Usa o valor de 'parcela13' diretamente como a mensalidade base.
     valor_mensal = float(base.get("parcela13", 0.0))
-    primeira_cota = valor_mensal # A primeira cota é igual à mensalidade base.
-    
-    # Usa a anuidade do dicionário se existir, caso contrário, calcula.
-    anuidade_total = float(base.get("anuidade", primeira_cota + (12 * valor_mensal)))
+    primeira_cota = valor_mensal
+    anuidade_total = float(base.get("anuidade", primeira_cota * 13))
     
     return {
         "primeira_cota": primeira_cota, 
@@ -274,68 +303,72 @@ def precos_2026(serie_modalidade: str) -> dict:
     }
 
 def calcula_bolsa(acertos: int, serie_modalidade: str | None = None) -> float:
-    """
-    Regra padrão (24 questões) via BOLSA_MAP.
-    Regra especial EF1 (1º ao 5º Ano): 10 questões total; 0→0%, 1–3:30%, 4–5:50%, 6–8:60%, 9–10:65%.
-    """
+    """Inclui a regra especial para o EF1 (1º ao 5º Ano)."""
     if serie_modalidade == "1º ao 5º Ano":
         a = max(0, min(acertos, 10))
-        if a == 0:
-            return 0.0
-        if 1 <= a <= 3:
-            return 0.30
-        if 4 <= a <= 5:
-            return 0.50
-        if 6 <= a <= 8:
-            return 0.60
-        # 9–10 (e qualquer valor acima, já truncado) → 65%
-        return 0.65
-    # Demais séries (24 questões)
+        if a == 0: return 0.0
+        if 1 <= a <= 3: return 0.30
+        if 4 <= a <= 5: return 0.50
+        if 6 <= a <= 8: return 0.60
+        return 0.65 # 9-10 acertos
     ac = max(0, min(acertos, 24))
     return BOLSA_MAP.get(ac, 0.30)
 
 def format_currency(v: float) -> str:
     try:
-        v_float = float(v)
-        return f"R$ {v_float:,.2f}".replace(",", "@").replace(".", ",").replace("@", ".")
-    except (ValueError, TypeError):
-        return str(v)
+        return f"R$ {float(v):,.2f}".replace(",", "@").replace(".", ",").replace("@", ".")
+    except (ValueError, TypeError): return str(v)
 
 def parse_brl_to_float(x) -> float:
-    """Converte 'R$ 1.234,56' ou '1234,56' para 1234.56. Retorna 0.0 se vazio/ inválido."""
-    if isinstance(x, (int, float)):
-        return float(x)
-    if not x:
-        return 0.0
-    s = str(x).strip()
-    s = s.replace("R$", "").strip()
-    s = s.replace(".", "").replace(",", ".")
-    try:
-        return float(s)
-    except Exception:
-        return 0.0
+    if isinstance(x, (int, float)): return float(x)
+    if not x: return 0.0
+    s = str(x).strip().replace("R$", "").replace(".", "").replace(",", ".")
+    try: return float(s)
+    except Exception: return 0.0
 
 def format_phone_mask(raw: str) -> str:
-    """Formata em (##) #####-#### (ou (##) ####-#### para 10 dígitos) conforme quantidade de dígitos."""
-    if raw is None:
-        return ""
+    if raw is None: return ""
     digits = re.sub(r"\D", "", str(raw))
-    digits = digits[:11]  # limita a 11 dígitos
-    if len(digits) >= 11:
-        return f"({digits[:2]}) {digits[2:7]}-{digits[7:11]}"
-    elif len(digits) == 10:
-        return f"({digits[:2]}) {digits[2:6]}-{digits[6:10]}"
-    elif len(digits) > 6:
-        return f"({digits[:2]}) {digits[2:7]}-{digits[7:]}"
-    elif len(digits) > 2:
-        return f"({digits[:2]}) {digits[2:]}"
-    elif len(digits) > 0:
-        return f"({digits}"
-    return ""
+    if len(digits) >= 11: return f"({digits[:2]}) {digits[2:7]}-{digits[7:11]}"
+    elif len(digits) == 10: return f"({digits[:2]}) {digits[2:6]}-{digits[6:10]}"
+    return digits
 
 def enforce_phone_mask(key: str):
-    """Callback do Streamlit para aplicar a máscara no session_state[key]."""
     st.session_state[key] = format_phone_mask(st.session_state.get(key, ""))
+
+def gerar_html_material_didatico(unidade: str) -> str:
+    """Gera o HTML para as tabelas de material didático com base na unidade."""
+    precos_gerais = {"Medicina": ("R$ 4.009,95", "11x de R$ 364,54"), "Pré-Vestibular": ("R$ 4.009,95", "11x de R$ 364,54")}
+    precos_militares = {"AFA/EN/EFOMM": ("R$ 2.333,73", "11x de R$ 212,16"), "EPCAR": ("R$ 2.501,36", "11x de R$ 227,40"), "ESA": ("R$ 1.111,98", "11x de R$ 101,09"), "EsPCEx": ("R$ 2.668,97", "11x de R$ 242,63"), "IME/ITA": ("R$ 2.333,73", "11x de R$ 212,16")}
+    precos_didatico_padrao = {"1ª ao 5ª ano": ("R$ 2.552,80", "11x de R$ 232,07"), "6ª ao 8ª ano": ("R$ 2.765,77", "11x de R$ 251,43"), "9ª ano Vestibular": ("R$ 2.872,69", "11x de R$ 261,15"), "1ª e 2ª série Vestibular": ("R$ 3.399,67", "11x de R$ 309,06"), "3ª série": ("R$ 4.009,95", "11x de R$ 364,54")}
+    precos_sao_joao = {"1ª ao 5ª ano": ("R$ 1.933,56", "11x de R$ 175,78"), "6ª ao 8ª ano": ("R$ 2.020,92", "11x de R$ 183,72"), "9ª ano Vestibular": ("R$ 2.019,84", "11x de R$ 183,62"), "1ª e 2ª série Vestibular": ("R$ 2.474,20", "11x de R$ 224,93"), "3ª série": ("R$ 2.932,21", "11x de R$ 266,56")}
+    precos_retiro = {"1ª ao 5ª ano": ("R$ 2.552,80", "11x de R$ 232,07")}
+    
+    dados_didatico = {}
+    if unidade == "SÃO JOÃO DE MERITI":
+        titulo_didatico = "Material Didático (exclusivo São João de Meriti)"
+        dados_didatico = precos_sao_joao
+    elif unidade == "RETIRO DOS ARTISTAS":
+        titulo_didatico = "Material Didático"
+        dados_didatico = precos_didatico_padrao.copy()
+        dados_didatico.update(precos_retiro)
+    else:
+        titulo_didatico = "Material Didático"
+        dados_didatico = precos_didatico_padrao
+
+    tabela_didatico_html = f'<table class="pag2"><tr><th colspan="3">{titulo_didatico}</th></tr>'
+    for curso, valores in dados_didatico.items(): tabela_didatico_html += f'<tr><td>{curso}</td><td>{valores[0]}</td><td>{valores[1]}</td></tr>'
+    tabela_didatico_html += '</table><br>'
+
+    tabela_geral_html = '<table class="pag2"><tr><th colspan="3">Material Didático (geral)</th></tr>'
+    for curso, valores in precos_gerais.items(): tabela_geral_html += f'<tr><td>{curso}</td><td>{valores[0]}</td><td>{valores[1]}</td></tr>'
+    tabela_geral_html += '</table><br>'
+    
+    tabela_militares_html = '<table class="pag2"><tr><th colspan="3">Material Militares</th></tr>'
+    for curso, valores in precos_militares.items(): tabela_militares_html += f'<tr><td>{curso}</td><td>{valores[0]}</td><td>{valores[1]}</td></tr>'
+    tabela_militares_html += '</table><br>'
+
+    return tabela_didatico_html + tabela_geral_html + tabela_militares_html
 
 def gera_pdf_html(ctx: dict) -> bytes:
     base_dir = Path(__file__).parent
@@ -349,11 +382,25 @@ def gera_pdf_html(ctx: dict) -> bytes:
         html_obj = weasyprint.HTML(string=html_renderizado, base_url=str(base_dir))
         return html_obj.write_pdf()
     except FileNotFoundError:
-        st.error("Arquivo 'carta.html' não encontrado no diretório. Crie o template HTML.")
+        st.error("Arquivo 'carta.html' ou 'style.css' não encontrado.")
         return b""
     except Exception as e:
         st.error(f"Erro ao gerar PDF: {e}")
         return b""
+
+def calcula_valor_minimo(unidade, serie_modalidade):
+    try:
+        desconto_maximo = DESCONTOS_MAXIMOS_POR_UNIDADE.get(unidade, 0)
+        precos = precos_2026(serie_modalidade)
+        valor_anuidade_integral = precos.get("anuidade", 0.0)
+        if valor_anuidade_integral > 0 and desconto_maximo > 0:
+            valor_minimo_anual = valor_anuidade_integral * (1 - desconto_maximo)
+            return valor_minimo_anual / 12
+        else:
+            return 0.0
+    except Exception as e:
+        st.error(f"❌ Erro ao calcular valor mínimo: {e}")
+        return 0.0
 
 @st.cache_data(ttl=600)
 def get_hubspot_data_for_activation():
@@ -382,22 +429,8 @@ def get_hubspot_data_for_activation():
         st.error(f"❌ Falha ao carregar dados do Hubspot: {e}")
         return pd.DataFrame()
 
-def calcula_valor_minimo(unidade, serie_modalidade):
-    try:
-        desconto_maximo = DESCONTOS_MAXIMOS_POR_UNIDADE.get(unidade, 0)
-        precos = precos_2026(serie_modalidade)
-        valor_anuidade_integral = precos.get("anuidade", 0.0)
-        if valor_anuidade_integral > 0 and desconto_maximo > 0:
-            valor_minimo_anual = valor_anuidade_integral * (1 - desconto_maximo)
-            return valor_minimo_anual / 12
-        else:
-            return 0.0
-    except Exception as e:
-        st.error(f"❌ Erro ao calcular valor mínimo: {e}")
-        return 0.0
-
 # --------------------------------------------------
-# INTERFACE STREAMLIT
+# INTERFACE STREAMLIT (CÓDIGO ORIGINAL PRESERVADO)
 # --------------------------------------------------
 st.set_page_config(page_title="Gestor do Bolsão", layout="centered")
 st.title("🎓 Gestor do Bolsão")
@@ -770,12 +803,12 @@ with aba_valores:
         ("EFI",  "2º Ano", 2050.31, 2050.31),
         ("EFI",  "3º Ano", 2050.31, 2050.31), 
         ("EFI",  "4º Ano", 2050.31, 2050.31),
-        ("EFI",  "5º Ano", 2050.31, 2050.31), 
+        ("EFI",  "5º Ano", 2050.31, 2050.31),
         
         ("EFII", "6º Ano", 2411.85, 2411.85),
         ("EFII", "7º Ano", 2411.85, 2411.85), 
         ("EFII", "8º Ano", 2411.85, 2411.85),
-        ("EFII", "9º Ano - Militar", 2626.62, 2626.62),
+        ("EFII", "9º Ano - Militar",     2626.62, 2626.62),
         ("EFII", "9º Ano - Vestibular", 2626.62, 2626.62),
         
         ("EM",   "1ª Série - Militar",     2820.77, 2820.77),
@@ -810,3 +843,4 @@ with aba_valores:
             "12 parcelas de": st.column_config.NumberColumn(format="R$ %.2f"),
         },
     )
+
